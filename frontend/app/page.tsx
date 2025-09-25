@@ -49,30 +49,30 @@ export default function HomePage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by city, artist, or event..."
-            className="flex-1 p-2 border rounded-lg shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-600"
+            className="flex-1 p-2 border rounded-lg shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-900"
           />
           <button
             type="submit"
-            className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            className="px-5 py-2 font-bold bg-blue-900 text-white rounded-lg hover:bg-white hover:text-neutral-900 cursor-pointer transition"
           >
             Search
           </button>
         </form>
 
         {/* Loading / Error */}
-        {loading && <p className="p-4 text-gray-300">⏳ Loading events...</p>}
-        {error && <p className="p-4 text-red-500">❌ {error}</p>}
+        {loading && <p className="p-4 text-gray-300 font-bold text-lg">⏳ Loading events...</p>}
+        {error && <p className="p-4 text-red-100 font-bold text-lg">❌ {error}</p>}
 
         {/* Results */}
         {!loading && !error && (
           <>
             {events.length === 0 ? (
-              <p className="text-gray-400">No events found.</p>
+              <p className="text-gray-400 font-bold text-lg">No events found.</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {events.map((event) => {
                   const venue = event._embedded?.venues?.[0];
-                  const image = event.images?.[0]?.url || "/placeholder.jpg"; // fallback if missing
+                  const image = event.images?.[0]?.url || "/placeholder.jpg"; // get images for events && fallback if missing
                   return (
                     <div
                       key={event.id}
@@ -106,7 +106,7 @@ export default function HomePage() {
                         href={event.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-auto inline-block px-5 py-2 bg-gray-300 text-gray-700 font-medium rounded-md hover:bg-blue-700 hover:text-white transition"
+                        className="mt-auto inline-block px-5 py-2 bg-gray-300 text-gray-700 font-medium rounded-md hover:bg-blue-900 hover:text-white transition"
                       >
                         🎟 Buy Tickets
                       </a>
