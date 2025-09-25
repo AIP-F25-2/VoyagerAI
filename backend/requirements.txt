@@ -1,5 +1,6 @@
 flask
 flask-cors
+<<<<<<< Updated upstream
 requests
 python-dotenv
 pymongo
@@ -11,3 +12,9 @@ flask-sqlalchemy
 
 
 
+=======
+flask-sqlalchemy
+psycopg2-binary
+requests
+python-dotenv
+>>>>>>> Stashed changes
