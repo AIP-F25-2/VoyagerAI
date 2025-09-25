@@ -1,6 +1,13 @@
 flask
 flask-cors
-flask-sqlalchemy
-psycopg2-binary
 requests
 python-dotenv
+pymongo
+dnspython
+# Optional
+psycopg2-binary
+sqlalchemy
+flask-sqlalchemy
+
+
+
