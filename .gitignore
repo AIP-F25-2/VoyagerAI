@@ -205,3 +205,29 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.vercel/
+frontend/.turbo/
+
+# Backend virtualenv (explicit path in case nested)
+backend/venv/
+
+# Local SQLite databases
+backend/voyagerai.db
+*.sqlite
+*.sqlite3
+
+# Playwright artifacts
+playwright-report/
+test-results/
+
+# Logs
+*.log
+nohup.out
+
+# OS / editor junk
+.DS_Store
