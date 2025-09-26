@@ -15,6 +15,11 @@ def fetch_events(keyword="music", country="CA"):
     try:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+
+        # Debug log
+        print("Ticketmaster Raw API Response:", data)
+
+        return data
     except Exception as e:
         return {"error": str(e)}

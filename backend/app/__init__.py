@@ -11,7 +11,7 @@ def create_app():
     @app.route("/")
     def index():
         return {
-            "message": "🚀 VoyagerAI Backend Running",
+            "message": "VoyagerAI Backend Running",
             "routes": ["/api/", "/api/events?q=Toronto"]
         }
 
