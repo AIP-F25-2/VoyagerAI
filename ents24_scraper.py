@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ents24_scraper.py - Scrapes europaticket.com events for the selected months.
+ents24_scraper.py - Scrapes events for the selected months.
 """
 
 import requests, time, datetime, csv, sys
@@ -116,3 +116,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
