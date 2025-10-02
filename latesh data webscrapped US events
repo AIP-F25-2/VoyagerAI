@@ -1,0 +1,97 @@
+# eventbrite_event_pages_6month_range.py
+import time
+import pandas as pd
+from pathlib import Path
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+from playwright.sync_api import sync_playwright
+
+BASE_URL = "https://www.eventbrite.com/d/united-states/events/"
+FIELDS = ["title", "date_time", "location", "price", "url"]
+
+def get_event_details(page, url):
+    """Open an event page and extract details"""
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=60000)
+        time.sleep(2)
+
+        title = page.locator("h1").inner_text().strip()
+
+        try:
+            date_time = page.locator("div[data-testid='event-date-and-time']").inner_text().strip()
+        except:
+            date_time = ""
+
+        try:
+            location = page.locator("div[data-testid='event-detail-location']").inner_text().strip()
+        except:
+            location = ""
+
+        try:
+            price = page.locator("div[data-testid='event-details__data']").inner_text().strip()
+        except:
+            price = ""
+
+        return {
+            "title": title,
+            "date_time": date_time,
+            "location": location,
+            "price": price,
+            "url": url
+        }
+    except Exception as e:
+        print(f" Failed to scrape {url}: {e}")
+        return None
+
+def build_range_url(months_ahead=6):
+    """Build a single URL covering the next N months"""
+    today = datetime.today().replace(day=1)  # start of this month
+    start_date = today.strftime("%Y-%m-%d")
+    end_date = (today + relativedelta(months=months_ahead)).strftime("%Y-%m-%d")
+    return f"{BASE_URL}?start_date={start_date}&end_date={end_date}"
+
+def main():
+    all_rows = []
+    range_url = build_range_url(6)  #  one URL for 6 months
+    print(" Scraping range URL:", range_url)
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        # Open the 6-month range page
+        page.goto(range_url, wait_until="domcontentloaded", timeout=60000)
+
+        # Collect event links
+        cards = page.locator("a[href*='/e/']")
+        n = cards.count()
+        urls = set()
+        for i in range(n):
+            href = cards.nth(i).get_attribute("href")
+            if href and "/e/" in href:
+                if href.startswith("/"):
+                    full_url = "https://www.eventbrite.com" + href.split("?")[0]
+                else:
+                    full_url = href.split("?")[0]
+                urls.add(full_url)
+
+        print(f" Found {len(urls)} unique events in 6-month range")
+
+        # Scrape details
+        for idx, ev_url in enumerate(urls, 1):
+            print(f"  Scraping event {idx}/{len(urls)}: {ev_url}")
+            details = get_event_details(page, ev_url)
+            if details:
+                all_rows.append(details)
+
+        browser.close()
+
+    if all_rows:
+        out = Path("eventbrite_events_6month_range.csv")
+        pd.DataFrame(all_rows, columns=FIELDS).to_csv(out, index=False, encoding="utf-8-sig")
+        print(f"\n Done! Saved {len(all_rows)} events to:", out.resolve())
+    else:
+        print("No events scraped.")
+
+if __name__ == "__main__":
+    main()
