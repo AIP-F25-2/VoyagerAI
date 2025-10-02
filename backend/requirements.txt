@@ -1,20 +1,19 @@
 flask
 flask-cors
-<<<<<<< Updated upstream
+
 requests
 python-dotenv
 pymongo
 dnspython
-# Optional
+
 psycopg2-binary
 sqlalchemy
 flask-sqlalchemy
 
-
-
-=======
 flask-sqlalchemy
 psycopg2-binary
 requests
 python-dotenv
->>>>>>> Stashed changes
+
+pymongo
+dnspython
