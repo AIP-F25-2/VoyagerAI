@@ -1,5 +1,17 @@
 .page { margin: 0 auto; max-width: 72rem; padding: 2.5rem 1rem; }
 
+.authBg {
+  min-height: calc(100dvh - 120px);
+  display: grid;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1rem;
+  background:
+    radial-gradient(1000px 300px at 50% -10%, rgba(59,130,246,0.15), rgba(59,130,246,0) 60%),
+    radial-gradient(700px 300px at 80% 10%, rgba(124,58,237,0.12), rgba(124,58,237,0) 60%);
+  border-radius: 1rem;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;

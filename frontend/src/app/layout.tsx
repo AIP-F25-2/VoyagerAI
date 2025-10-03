@@ -37,6 +37,8 @@ export default function RootLayout({
                 <a href="#">Events</a>
                 <a href="#">Planner</a>
                 <a href="#">About</a>
+                <a href="/login">Login</a>
+                <a href="/signup">Sign up</a>
               </nav>
             </div>
           </header>
