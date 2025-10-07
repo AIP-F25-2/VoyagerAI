@@ -43,7 +43,7 @@ export default function EventsSection({ title, events, provider }: EventsSection
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="flex justify-center items-center gap-4 mt-8">
+            <div className="flex justify-center items-center gap-4 my-16">
               <button
                 onClick={handlePrev}
                 disabled={currentPage === 1}
