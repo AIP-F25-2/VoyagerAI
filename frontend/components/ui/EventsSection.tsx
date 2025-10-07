@@ -49,11 +49,11 @@ export default function EventsSection({ title, events, provider }: EventsSection
                 disabled={currentPage === 1}
                 className={`px-4 py-2 rounded-lg font-semibold transition-all ${
                   currentPage === 1
-                    ? "bg-gray-500/30 text-gray-400 cursor-not-allowed"
-                    : "bg-blue-950/70 hover:bg-blue-950 text-white"
+                    ? "border border-neutral-950 bg-gradient-to-bl from-neutral-950 via-blue-950 to-neutral-950 text-gray-600 cursor-not-allowed"
+                    : "border border-blue-950 bg-gradient-to-r from-neutral-950 via-black-950 to-blue-950 text-white hover:shadow-[0_0_20px_rgba(59,130,246,0.4)] transition-all duration-300 ease-in-out cursor-pointer"
                 }`}
               >
-                ◄  &nbsp; Previous
+                ⮜ &nbsp; Previous
               </button>
 
               <span className="text-gray-300 text-sm">
@@ -63,13 +63,14 @@ export default function EventsSection({ title, events, provider }: EventsSection
               <button
                 onClick={handleNext}
                 disabled={currentPage === totalPages}
-                className={`px-4 py-2 rounded-lg font-semibold transition-all hover:cursor-pointer ${
+                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
                   currentPage === totalPages
-                    ? "bg-gray-500/30 text-gray-400 cursor-not-allowed"
-                    : "bg-blue-950/70 hover:bg-blue-950 text-white"
+                    ? "border border-neutral-950 bg-gradient-to-br from-neutral-950 via-blue-950 to-neutral-950 text-gray-600 cursor-not-allowed"
+                    : "border border-blue-950 bg-gradient-to-r from-blue-950 via-black-950 to-neutral-950 text-white hover:shadow-[0_0_20px_rgba(59,130,246,0.4)] transition-all duration-300 ease-in-out cursor-pointer"
+
                 }`}
               >
-                Next &nbsp; ►
+                Next &nbsp; ⮞
               </button>
             </div>
           )}
