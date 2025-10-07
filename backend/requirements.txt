@@ -1,8 +1,16 @@
 flask==3.0.0
 flask-cors==4.0.0
 flask-sqlalchemy==3.1.1
-requests==2.31.0
-python-dotenv==1.0.0
+sqlalchemy==2.0.43
+psycopg2-binary==2.9.9
+
+requests==2.32.3
+python-dotenv==1.0.1
+
+# External providers storage support
+pymongo==4.10.1
+dnspython==2.7.0
+
 playwright==1.40.0
 pandas==2.1.4
 gunicorn==21.2.0

@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-WSGI entry point for VoyagerAI Flask application
-"""
-
 from app import create_app
 
 app = create_app()

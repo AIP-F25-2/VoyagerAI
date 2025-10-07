@@ -231,3 +231,6 @@ nohup.out
 
 # OS / editor junk
 .DS_Store
+
+# Python virtualenv used at repo root (from nischal branch)
+/voyagerai_venv
