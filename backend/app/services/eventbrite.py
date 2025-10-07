@@ -1,35 +1,29 @@
 import os
 import requests
 
-API_BASE = "https://www.eventbriteapi.com/v3"
+EVENTBRITE_TOKEN = os.getenv("EVENTBRITE_PRIVATE_TOKEN")
+BASE_URL = "https://www.eventbriteapi.com/v3/events/search/"
 
-def fetch_events(keyword="music", location=None, size=10):
-    """Fetch events from Eventbrite with fallback if location fails."""
-    token = os.getenv("EVENTBRITE_PRIVATE_TOKEN")
-    if not token:
-        return {"error": "Missing Eventbrite private token"}
+def fetch_events(query="", location="", size=12):
+    """
+    Fetch Eventbrite events filtered by keyword and location.
+    """
+    headers = {"Authorization": f"Bearer {EVENTBRITE_TOKEN}"}
+    params = {
+        "expand": "venue",
+        "sort_by": "date",
+        "page_size": size,
+    }
 
-    headers = {"Authorization": f"Bearer {token}"}
-    params = {"q": keyword, "expand": "venue", "page_size": size}
-
-    if location:  # only add location if provided
+    if query:
+        params["q"] = query
+    if location:
         params["location.address"] = location
 
     try:
-        resp = requests.get(f"{API_BASE}/events/search/", headers=headers, params=params, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-
-        # If no events found, retry without location filter
-        if not data.get("events"):
-            print("!!! No events found with location, retrying without it…")
-            params.pop("location.address", None)
-            resp = requests.get(f"{API_BASE}/events/search/", headers=headers, params=params, timeout=15)
-            resp.raise_for_status()
-            data = resp.json()
-
-        print("Eventbrite RAW:", data)
-        return data
-
+        response = requests.get(BASE_URL, headers=headers, params=params, timeout=10)
+        response.raise_for_status()
+        return response.json()
     except Exception as e:
-        return {"error": str(e)}
+        print(f"❌ Eventbrite API Error: {e}")
+        return {}

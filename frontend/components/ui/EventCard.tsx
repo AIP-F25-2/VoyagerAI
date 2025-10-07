@@ -14,8 +14,8 @@ export default function EventCard({ event, provider }: EventCardProps) {
   return (
     <div
       className="p-4 rounded-2xl
-      bg-gradient-to-b from-blue-950 via-neutral-900 to-black text-white border border-blue-950
-      hover:bg-gradient-to-b hover:from-black hover:via-black hover:to-blue-950 hover:text-white hover:scale-102 hover:glass-light
+      bg-gradient-to-b from-neutral-900 via-blue-950 to-black text-white border-2 border-neutral-900
+      hover:bg-gradient-to-b hover:from-black hover:via-black hover:to-blue-950 hover:text-white hover:scale-102 hover:glass-light hover:border-blue-950
       duration-300 transition"
     >
       <Image
@@ -43,7 +43,7 @@ export default function EventCard({ event, provider }: EventCardProps) {
         rel="noreferrer"
         className="m-auto inline-block w-full text-center px-5 py-2
         font-semibold rounded-lg text-white border glass-light
-        border-blue-950 bg-gradient-to-br from-black via-blue-950 to-black
+        border-blue-950 bg-gradient-to-br from-neutral-900 via-blue-950 to-neutral-900
         hover:from-blue-950 hover:via-black hover:to-blue-950 hover:border-black
         duration-300 transition"
       >

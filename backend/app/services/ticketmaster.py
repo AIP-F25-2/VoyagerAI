@@ -1,25 +1,31 @@
-import requests
 import os
+import requests
 
-def fetch_events(keyword="music", country="CA"):
-    """Fetch events from Ticketmaster Discovery API"""
-    apikey = os.getenv("TICKETMASTER_API_KEY")
-    if not apikey:
-        return {"error": "Missing Ticketmaster API Key"}
+TICKETMASTER_API_KEY = os.getenv("TICKETMASTER_API_KEY")
+BASE_URL = "https://app.ticketmaster.com/discovery/v2/events.json"
 
-    url = (
-        f"https://app.ticketmaster.com/discovery/v2/events.json"
-        f"?apikey={apikey}&keyword={keyword}&countryCode={country}&size=5"
-    )
+def fetch_events(query="", city="", start_date=None, size=12):
+    """
+    Fetch Ticketmaster events filtered by keyword, city, and date.
+    """
+    params = {
+        "apikey": TICKETMASTER_API_KEY,
+        "size": size,
+        "sort": "date,asc",
+        "countryCode": "CA",  # or remove if you want global
+    }
+
+    if query:
+        params["keyword"] = query
+    if city:
+        params["city"] = city
+    if start_date:
+        params["startDateTime"] = start_date
 
     try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-
-        # Debug log
-        print("Ticketmaster Raw API Response:", data)
-
-        return data
+        response = requests.get(BASE_URL, params=params, timeout=10)
+        response.raise_for_status()
+        return response.json()
     except Exception as e:
-        return {"error": str(e)}
+        print(f"❌ Ticketmaster API Error: {e}")
+        return {}

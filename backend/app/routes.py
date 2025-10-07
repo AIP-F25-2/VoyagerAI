@@ -1,13 +1,7 @@
 from flask import Blueprint, jsonify, request
 from .services.ticketmaster import fetch_events as fetch_ticketmaster
 from .services.eventbrite import fetch_events as fetch_eventbrite
-from .models import (
-    save_ticketmaster_events,
-    save_eventbrite_events,
-    get_all_ticketmaster,
-    get_all_eventbrite,
-    get_all_events,
-)
+from datetime import datetime
 
 bp = Blueprint("api", __name__)
 
@@ -17,34 +11,37 @@ def home():
 
 @bp.route("/events")
 def get_events():
-    """Fetch from APIs and save into MongoDB"""
-    query = request.args.get("q", "music")
-    size = int(request.args.get("size", "10"))
-    location = request.args.get("city", query)
+    """
+    Fetch events from both Ticketmaster & Eventbrite.
+    If 'q' or 'city' are provided, they are used to narrow results.
+    Otherwise, fetches all events from the user's location or country.
+    """
+    query = request.args.get("q", "").strip()
+    city = request.args.get("city", "").strip()
+    size = int(request.args.get("size", "12"))
 
-    # Fetch Ticketmaster + Eventbrite
-    ticketmaster_data = fetch_ticketmaster(query)
-    eventbrite_data = fetch_eventbrite(query, location, size)
+    # Get current date
+    today = datetime.utcnow().strftime("%Y-%m-%dT00:00:00Z")
 
-    tm_events = ticketmaster_data.get("_embedded", {}).get("events", [])
-    eb_events = eventbrite_data.get("events", [])
+    # Ticketmaster API fetch
+    ticketmaster_data = fetch_ticketmaster(
+        query=query,
+        city=city,
+        start_date=today,
+        size=size
+    )
 
-    # Save to Mongo
-    if tm_events:
-        save_ticketmaster_events(tm_events)
-    if eb_events:
-        save_eventbrite_events(eb_events)
+    # Eventbrite API fetch
+    eventbrite_data = fetch_eventbrite(
+        query=query,
+        location=city,
+        size=size
+    )
+
+    print(f"🎟 Ticketmaster -> {len(ticketmaster_data.get('_embedded', {}).get('events', []))} results")
+    print(f"📅 Eventbrite -> {len(eventbrite_data.get('events', []))} results")
 
     return jsonify({
-        "ticketmaster": tm_events,
-        "eventbrite": eb_events
-    })
-
-@bp.route("/events/db")
-def get_events_from_db():
-    """Return cached events from MongoDB"""
-    return jsonify({
-        "ticketmaster": get_all_ticketmaster(),
-        "eventbrite": get_all_eventbrite(),
-        "all": get_all_events()
+        "ticketmaster": ticketmaster_data.get("_embedded", {}).get("events", []),
+        "eventbrite": eventbrite_data.get("events", [])
     })
