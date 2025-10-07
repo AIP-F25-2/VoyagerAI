@@ -1,27 +1,20 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import Header from "@/components/ui/Header";
+import Footer from "@/components/ui/Footer";
 
 export const metadata: Metadata = {
   title: "VoyagerAI Event Explorer",
-  description: "Discover events powered by Ticketmaster API",
+  description: "Discover events powered by Ticketmaster & Eventbrite APIs",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="antialiased bg-gray-900 text-gray-300"
-        suppressHydrationWarning={true}>
-        <header className="p-4 bg-blue-900 text-white">
-          <h1 className="text-2xl font-bold">TEAM ODYSSEY | VoyagerAI</h1>
-        </header>
+      <body className="antialiased bg-white text-neutral-900">
+        <Header />
         <main className="p-6">{children}</main>
-        <footer className="mt-4 p-4 text-center text-sm text-gray-300 bg-blue-900">
-          © {new Date().getFullYear()} VoyagerAI | Built by Team Odyssey @LCiT
-        </footer>
+        <Footer />
       </body>
     </html>
   );
