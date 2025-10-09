@@ -6,7 +6,7 @@ This is a web app I built to find events from different sources like BookMyShow.
 
 - Backend: Flask (Python)
 - Frontend: Next.js with React
-- Database: SQLite (works out of the box)
+- Database: PostgreSQL
 - Web scraping: Playwright to get events from websites
 
 ## How to run it
@@ -14,6 +14,7 @@ This is a web app I built to find events from different sources like BookMyShow.
 You need:
 - Python 3.8 or newer
 - Node.js 18 or newer
+- PostgreSQL
 - Git
 
 The easiest way is to just run:
@@ -32,6 +33,8 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 playwright install chromium
+# Set up your PostgreSQL database first
+python setup_database.py
 python init_db.py
 python wsgi.py
 ```
@@ -143,7 +146,8 @@ VoyagerAI/
 3. **Database issues**
    ```bash
    cd backend
-   rm -f voyagerai.db && python init_db.py
+   python setup_database.py
+   python init_db.py
    ```
 
 That's it! The app should work with the default settings.
