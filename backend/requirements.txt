@@ -4,6 +4,10 @@ flask-sqlalchemy==3.1.1
 sqlalchemy==2.0.43
 psycopg2-binary==2.9.9
 
+# Authentication dependencies
+pyjwt==2.8.0
+werkzeug==3.0.1
+
 requests==2.32.3
 python-dotenv==1.0.1
 
@@ -11,6 +15,9 @@ python-dotenv==1.0.1
 pymongo==4.10.1
 dnspython==2.7.0
 
+# Web scraping dependencies
 playwright==1.40.0
 pandas==2.1.4
+beautifulsoup4==4.12.2
+python-dateutil==2.9.0.post0
 gunicorn==21.2.0

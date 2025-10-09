@@ -20,9 +20,11 @@ def init_database():
             print("✅ Database tables created successfully!")
             
             # Test database connection
-            from app.models import Event
+            from app.models import Event, User
             event_count = Event.query.count()
+            user_count = User.query.count()
             print(f"📊 Current events in database: {event_count}")
+            print(f"👥 Current users in database: {user_count}")
             
         except Exception as e:
             print(f"❌ Error creating database: {e}")

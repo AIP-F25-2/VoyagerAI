@@ -27,9 +27,11 @@ def create_app():
     # Ensure models are registered
     from . import models  # noqa: F401
 
-    # Register blueprint
+    # Register blueprints
     from .routes import bp as api_bp
+    from .auth import auth_bp
     app.register_blueprint(api_bp, url_prefix="/api")
+    app.register_blueprint(auth_bp, url_prefix="/api/auth")
 
     @app.route("/")
     def index():
