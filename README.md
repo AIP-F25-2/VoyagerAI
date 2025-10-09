@@ -1,113 +1,85 @@
-# 🚀 VoyagerAI - Event Discovery Platform
+# VoyagerAI - Event Discovery App
 
-A full-stack web application for discovering and managing events from BookMyShow, built with Flask (Python) backend and Next.js (React) frontend, using SQLite by default for data storage (PostgreSQL optional).
+This is a web app I built to find events from different sources like BookMyShow. It has a Python backend and React frontend.
 
-## 🏗️ Architecture
+## What I used
 
-- **Backend**: Flask with SQLAlchemy ORM
-- **Frontend**: Next.js with TypeScript and Tailwind CSS
-- **Database**: PostgreSQL
-- **Web Scraping**: Playwright for BookMyShow events
-- **API**: RESTful API with CORS support
+- Backend: Flask (Python)
+- Frontend: Next.js with React
+- Database: SQLite (works out of the box)
+- Web scraping: Playwright to get events from websites
 
-## 🚀 Quick Start
+## How to run it
 
-### Prerequisites
-
-- Python 3.8+
-- Node.js 18+
-- SQLite (default) or PostgreSQL
+You need:
+- Python 3.8 or newer
+- Node.js 18 or newer
 - Git
 
-### 1. Database Setup
-
-SQLite is enabled by default; no installation is required.
-
-### 2. Start Everything (Recommended)
-
+The easiest way is to just run:
 ```bash
-# This will start both backend and frontend
 ./start_all.sh
 ```
 
-### 3. Manual Setup (Alternative)
+This starts both the backend and frontend for you.
 
-#### Backend Setup
+If you want to do it manually:
+
+### Backend
 ```bash
-# Navigate to backend
 cd backend
-
-# Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Install Playwright browsers
 playwright install chromium
-
-# Initialize database (creates voyagerai.db)
 python init_db.py
-
-# Start backend server
 python wsgi.py
 ```
 
-#### Frontend Setup
+### Frontend
 ```bash
-# Navigate to frontend (in a new terminal)
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start development server
 npm run dev
 ```
 
-## 🌐 Access Points
+## Where to find it
 
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:5000
-- **API Documentation**: http://localhost:5000/api/
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:5000
 
-## 📊 Features
+## What it does
 
-### Backend Features
-- **Event Scraping**: Automated scraping of BookMyShow events
-- **Database Storage**: PostgreSQL integration with SQLAlchemy
-- **RESTful API**: Complete CRUD operations for events
-- **CORS Support**: Cross-origin requests from frontend
-- **Error Handling**: Comprehensive error handling and logging
+### Backend
+- Scrapes events from BookMyShow and other sites
+- Stores events in a database
+- Has an API to get events
+- Handles errors properly
 
-### Frontend Features
-- **Modern UI**: Clean, responsive design with Tailwind CSS
-- **Event Management**: View, filter, and manage events
-- **Real-time Scraping**: Trigger event scraping from the UI
-- **Event Details**: Comprehensive event information display
-- **External Links**: Direct links to BookMyShow event pages
+### Frontend
+- Shows events in a nice UI
+- You can search and filter events
+- Click to scrape new events
+- Links to buy tickets
 
-## 🔧 API Endpoints
+## API stuff
 
-### Events
-- `GET /api/events` - Get all events (with optional city filter)
-- `GET /api/events/{id}` - Get specific event
-- `DELETE /api/events/{id}` - Delete event
+- `GET /api/events` - Get all events
+- `GET /api/events/{id}` - Get one event
+- `DELETE /api/events/{id}` - Delete an event
 - `POST /api/scrape` - Scrape new events
 
-### Scraping
-- `POST /api/scrape` - Trigger event scraping
-  ```json
-  {
-    "city": "Mumbai",
-    "limit": 10
-  }
-  ```
+To scrape events, send a POST request like:
+```json
+{
+  "city": "Mumbai",
+  "limit": 10
+}
+```
 
-## 🗄️ Database Schema
+## Database
 
-### Events Table
+The events table looks like this:
 ```sql
 CREATE TABLE events (
     id SERIAL PRIMARY KEY,
@@ -123,153 +95,55 @@ CREATE TABLE events (
 );
 ```
 
-## 🛠️ Development
+## Development
 
-### Backend Development
+### Backend
 ```bash
 cd backend
 source venv/bin/activate
-
-# Run server
 python wsgi.py
-
-# Or via CLI
-python cli.py runserver
-
-# Init DB
-python init_db.py
-# Or
-python cli.py init-db
-
-# Scrape via CLI (saves to DB)
-python cli.py scrape --city Mumbai --limit 10
 ```
 
-### Frontend Development
+### Frontend
 ```bash
 cd frontend
 npm run dev
 ```
 
-### Database Management
+### Reset database if needed
 ```bash
-# Initialize database
 cd backend
-python init_db.py
-
-# Reset database (if needed)
 rm -f voyagerai.db && python init_db.py
 ```
 
-## 🚀 Deployment
-
-### Production Backend
-```bash
-cd backend
-source venv/bin/activate
-gunicorn -w 4 -b 0.0.0.0:5000 wsgi:app
-```
-
-### Production Frontend
-```bash
-cd frontend
-npm run build
-npm start
-```
-
-## 📁 Project Structure
+## Project structure
 
 ```
 VoyagerAI/
-├── backend/
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── models.py
-│   │   ├── routes.py
-│   │   └── services/
-│   │       └── scraper.py
-│   ├── scripts/
-│   │   ├── README.md
-│   │   └── events_standalone.py
-│   ├── cli.py
-│   ├── init_db.py
-│   ├── wsgi.py
-│   ├── requirements.txt
-│   └── config.py
-├── frontend/
-│   ├── src/
-│   │   └── app/
-│   │       ├── page.tsx
-│   │       ├── layout.tsx
-│   │       └── globals.css
-│   ├── package.json
-│   └── next.config.ts
-├── setup_database.sh
-├── start_backend.sh
-├── start_frontend.sh
-├── start_all.sh
+├── backend/          # Python Flask backend
+├── frontend/         # React Next.js frontend
+├── start_all.sh      # Script to start everything
 └── README.md
 ```
 
-## 🔍 Troubleshooting
+## If something goes wrong
 
-### Common Issues
-
-1. **Switching to PostgreSQL (optional)**
-   ```bash
-   # Install Postgres (macOS)
-   brew install postgresql
-
-   # Set DATABASE_URL in backend/.env and restart backend
-   ```
-
-2. **Playwright Browser Issues**
+1. **Playwright issues**
    ```bash
    cd backend
    playwright install chromium
    ```
 
-3. **Port Already in Use**
+2. **Port already in use**
    ```bash
-   # Kill processes on ports 3000 and 5000
    lsof -ti:3000 | xargs kill -9
    lsof -ti:5000 | xargs kill -9
    ```
 
-4. **Database Permission Issues**
+3. **Database issues**
    ```bash
-   # Create database manually
-   createdb voyagerai
+   cd backend
+   rm -f voyagerai.db && python init_db.py
    ```
 
-## 📝 Environment Variables
-
-Create a `.env` file in the backend directory (optional, only needed to override defaults):
-
-```env
-DATABASE_URL=sqlite:///voyagerai.db
-FLASK_ENV=development
-FLASK_DEBUG=True
-SCRAPING_TIMEOUT=60
-MAX_EVENTS_PER_CITY=100
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
-## 🆘 Support
-
-For issues and questions:
-1. Check the troubleshooting section
-2. Review the API documentation
-3. Check the console logs for errors
-4. Ensure all dependencies are installed correctly
+That's it! The app should work with the default settings.
