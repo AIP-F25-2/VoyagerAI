@@ -13,20 +13,23 @@ export default function SearchBar({
   return (
     <form
       onSubmit={onSearch}
-      className="flex flex-col sm:flex-row items-center gap-3 glass-light p-3 rounded-xl border border-white/10"
+      className="flex flex-col sm:flex-row items-center gap-3 glass-light p-3 rounded-2xl border border-white/10 shadow-lg"
     >
       <input
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search by city, artist, or event..."
-        className="flex-1 px-4 py-2 rounded-lg bg-white/10 text-white placeholder-gray-300
+        className="flex-1 px-4 py-3 rounded-xl bg-white/10 text-white placeholder-gray-300
         focus:outline-none focus:ring-2 focus:ring-blue-400"
       />
       <button
         type="submit"
-        className="px-6 py-2 bg-blue-900 text-white rounded-lg font-semibold
-        hover:bg-blue-950 hover:cursor-pointer transition"
+        className="px-6 py-3 text-white rounded-xl font-bold hover:cursor-pointer transition"
+        style={{
+          background: 'linear-gradient(135deg, #0088ff, #6a5cff)',
+          boxShadow: '0 8px 22px rgba(0,136,255,0.25)'
+        }}
       >
         Search
       </button>

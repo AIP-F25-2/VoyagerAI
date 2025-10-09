@@ -4,9 +4,11 @@
   border-radius: 1rem;
   padding: 1.25rem;
   transition: box-shadow 150ms ease, transform 120ms ease, border-color 150ms ease;
-  background: linear-gradient(180deg, #ffffff, #fafafa);
+  background:
+    radial-gradient(600px 180px at 50% -10%, color-mix(in oklab, var(--brand-primary) 8%, transparent), transparent 60%),
+    linear-gradient(180deg, #ffffff, #fafafa);
 }
-.card:hover { box-shadow: 0 12px 30px rgba(0,0,0,0.12); transform: translateY(-2px); border-color: rgba(0,0,0,0.12); }
+.card:hover { box-shadow: 0 16px 36px rgba(0,0,0,0.14); transform: translateY(-3px); border-color: rgba(0,0,0,0.12); }
 @media (prefers-color-scheme: dark) {
   .card { background: linear-gradient(180deg, #0f172a, #0b1222); border-color: rgba(255,255,255,0.08); }
 }
@@ -24,7 +26,7 @@
 }
 
 .metaChips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
-.chip { font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 999px; background: rgba(59,130,246,0.12); color: #1e40af; border: 1px solid rgba(59,130,246,0.2); }
+.chip { font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 999px; background: color-mix(in oklab, var(--brand-primary) 12%, transparent); color: #0b3b80; border: 1px solid color-mix(in oklab, var(--brand-primary) 30%, transparent); }
 @media (prefers-color-scheme: dark) { .chip { background: rgba(59,130,246,0.18); color: #bfdbfe; border-color: rgba(59,130,246,0.35); } }
 .chipLabel { opacity: 0.7; margin-right: 0.35rem; font-weight: 600; }
 
@@ -38,18 +40,18 @@
 .actions { margin-top: 0.9rem; padding-top: 0.75rem; display: flex; justify-content: flex-start; border-top: 1px dashed rgba(0,0,0,0.08); }
 @media (prefers-color-scheme: dark) { .actions { border-top-color: rgba(255,255,255,0.12); } }
 .viewBtn {
-  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  background: linear-gradient(135deg, var(--brand-primary), #6a5cff);
   color: #ffffff;
   border: 0;
   border-radius: 999px;
-  padding: 0.48rem 0.95rem;
+  padding: 0.5rem 1rem;
   font-size: 0.8rem;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.01em;
   cursor: pointer;
-  box-shadow: 0 6px 16px rgba(37,99,235,0.35);
+  box-shadow: 0 8px 22px rgba(0,136,255,0.25);
 }
-.viewBtn:hover { filter: brightness(1.05); box-shadow: 0 8px 22px rgba(124,58,237,0.35); }
+.viewBtn:hover { filter: brightness(1.05); box-shadow: 0 10px 28px rgba(0,136,255,0.3); }
 .viewBtn:active { transform: translateY(1px); }
 @media (prefers-color-scheme: dark) { .viewBtn { box-shadow: 0 8px 20px rgba(37,99,235,0.4); } }
 

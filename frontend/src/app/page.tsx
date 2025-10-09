@@ -6,6 +6,7 @@ import { EventItem, fetchEvents, getAdaptiveRefreshIntervalMs } from '@/lib/api'
 import EventCard from '@/components/EventCard'
 import SkeletonCard from '@/components/SkeletonCard'
 import HotelsPlanner from '@/components/HotelsPlanner'
+import Header from '@/components/Header'
 
 export default function Home() {
   const [events, setEvents] = useState<EventItem[]>([])
@@ -51,6 +52,7 @@ export default function Home() {
 
   return (
     <div className={styles.page}>
+      <Header />
       <section className={styles.hero}>
         <div className={styles.badge}>
           <span className={styles.dot}></span>

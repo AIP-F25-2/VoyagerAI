@@ -114,6 +114,7 @@ import { MusicalNoteIcon, TrophyIcon, TicketIcon, SparklesIcon } from "@heroicon
 export default function HomePage() {
   const [ticketmasterEvents, setTicketmasterEvents] = useState<any[]>([]);
   const [eventbriteEvents, setEventbriteEvents] = useState<any[]>([]);
+  const [csvEvents, setCsvEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -154,10 +155,12 @@ export default function HomePage() {
       const data = await res.json();
       setTicketmasterEvents(data.ticketmaster || []);
       setEventbriteEvents(data.eventbrite || []);
+      setCsvEvents(data.csv_events || []);
     } catch (err: any) {
       setError(err.message || "Failed to fetch events");
       setTicketmasterEvents([]);
       setEventbriteEvents([]);
+      setCsvEvents([]);
     } finally {
       setLoading(false);
     }
@@ -188,34 +191,36 @@ export default function HomePage() {
   ];
 
   return (
-    <main className="min-h-screen text-white">
+    <main className="min-h-screen text-white select-none">
       {/* Hero Section */}
-      <section className="w-full py-16 text-center">
-        <h1 className="text-4xl font-extrabold mb-4">
-          Discover Events Around You
-        </h1>
-        <p className="text-gray-300 mb-6">
-          Find concerts, sports, theater shows, and more near{" "}
-          <span className="text-blue-400 font-semibold">{city || "your area"}</span>.
-        </p>
+      <section className="relative w-full py-16 text-center mx-auto max-w-6xl mt-6">
+        <div className="rounded-3xl glass-dark shadow-glow px-4 sm:px-8 py-10">
+          <h1 className="text-5xl font-extrabold tracking-tight mb-3">
+            Discover Events Around You
+          </h1>
+          <p className="max-w-2xl mx-auto text-lg text-gray-200 opacity-90 mb-6">
+            Find concerts, sports, theater shows, and more near{' '}
+            <span className="text-blue-400 font-semibold">{city || 'your area'}</span>.
+          </p>
 
-        {/* SearchBar */}
-        <div className="max-w-3xl mx-auto mb-6">
-          <SearchBar query={query} setQuery={setQuery} onSearch={handleSearch} />
-        </div>
+          {/* SearchBar */}
+          <div className="max-w-3xl mx-auto mb-6">
+            <SearchBar query={query} setQuery={setQuery} onSearch={handleSearch} />
+          </div>
 
-        {/* Category Buttons */}
-        <div className="flex flex-wrap justify-center gap-4">
-          {categories.map((cat) => (
-            <button
-              key={cat.label}
-              className="group flex items-center gap-2 px-6 py-2 bg-white/20 backdrop-blur-md rounded-lg text-white hover:bg-blue-600/40 transition-all duration-300 hover:cursor-pointer"
-              onClick={() => loadEvents(cat.label, city)}
-            >
-              <cat.icon className="h-5 w-5 text-white group-hover:text-white" />
-              <span>{cat.label}</span>
-            </button>
-          ))}
+          {/* Category Buttons */}
+          <div className="flex flex-wrap justify-center gap-4">
+            {categories.map((cat) => (
+              <button
+                key={cat.label}
+                className="group flex items-center gap-2 px-6 py-2 rounded-xl glass-light hover:bg-blue-600/40 hover:shadow-glow hover:cursor-pointer hover:scale-105 transition-all duration-300"
+                onClick={() => loadEvents(cat.label, city)}
+              >
+                <cat.icon className="h-5 w-5 text-neutral-300 group-hover:text-white transition" />
+                <span className="text-neutral-300 font-medium group-hover:text-white">{cat.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -236,6 +241,11 @@ export default function HomePage() {
               title="📅 Eventbrite Events"
               events={eventbriteEvents}
               provider="Eventbrite"
+            />
+            <EventsSection
+              title="📄 European Events"
+              events={csvEvents}
+              provider="CSV"
             />
           </>
         )}

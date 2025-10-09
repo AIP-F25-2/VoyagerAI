@@ -1,17 +1,31 @@
+'use client'
+
+import Link from 'next/link'
+
 export default function Header() {
   return (
-    <header className="p-4 bg-black/40 backdrop-blur-md border-b border-white/10 flex items-center justify-between sticky top-0 z-50 glass-dark">
-      <h1 className="text-3xl font-extrabold text-white tracking-wide select-none">
+    <header className="sticky top-0 z-50 flex items-center justify-between px-4 py-3 border-b border-white/10 glass-dark">
+      <Link href="/" className="text-2xl sm:text-3xl font-extrabold tracking-wide select-none text-white hover:text-gray-200 transition">
         VOYAGERAI <span className="text-sm font-normal text-gray-300">Team Odyssey</span>
-      </h1>
+      </Link>
 
-      <div className="flex items-center space-x-4">
-        <button className="px-4 py-1.5 border border-white/30 text-white rounded-lg hover:bg-white/20 transition hover:cursor-pointer">
+      <div className="flex items-center space-x-2">
+        <Link 
+          href="/login"
+          className="px-4 py-1.5 border border-white/30 text-white rounded-xl hover:bg-white/20 transition hover:cursor-pointer"
+        >
           Sign In
-        </button>
-        <button className="px-4 py-1.5 border border-white/30 text-white rounded-lg hover:bg-blue-600/60 transition hover:cursor-pointer">
+        </Link>
+        <Link 
+          href="/signup"
+          className="px-4 py-1.5 rounded-xl text-white transition hover:cursor-pointer"
+          style={{
+            background: 'linear-gradient(135deg, #0088ff, #6a5cff)',
+            boxShadow: '0 8px 22px rgba(0,136,255,0.25)'
+          }}
+        >
           Sign Up
-        </button>
+        </Link>
       </div>
     </header>
   );
