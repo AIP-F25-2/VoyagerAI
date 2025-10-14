@@ -1,5 +1,7 @@
 from flask import Blueprint, jsonify, request
-from .models import db, Event
+from .models import db, Event, Favorite
+from .services.hotels import search_hotels
+from .services.flights import search_flights
 from .services.scraper import (
     scrape_bookmyshow_events, 
     scrape_eventbrite_events, 
@@ -9,7 +11,9 @@ from .services.scraper import (
 from .services.ticketmaster import fetch_events as fetch_ticketmaster
 from .services.eventbrite import fetch_events as fetch_eventbrite
 from .services.csv_loader import csv_loader
+from .services.images import search_pixabay_image
 from datetime import datetime
+from io import StringIO
 
 bp = Blueprint("api", __name__)
 
@@ -203,6 +207,21 @@ def get_events():
                 print(f"💾 Saved {saved} CSV events to database")
         except Exception as e:
             print(f"❌ CSV Events Error: {e}")
+
+        # Enrich with a stored or fetched free image when missing
+        def with_image(ev):
+            if isinstance(ev.get("images"), list) and ev["images"]:
+                return ev
+            # Try Pixabay using event name
+            q = ev.get("name") or ev.get("title") or ""
+            img = search_pixabay_image(q) if q else None
+            if img:
+                ev["images"] = [{"url": img}]
+            return ev
+
+        ticketmaster_events = [with_image(e) for e in ticketmaster_events]
+        eventbrite_events = [with_image(e) for e in eventbrite_events]
+        csv_events = [with_image(e) for e in csv_events]
 
         return jsonify({
             "ticketmaster": ticketmaster_events,
@@ -461,3 +480,132 @@ def fetch_provider_events():
         "eventbrite": eventbrite_data.get("events", []),
         "csv_events": csv_events
     })
+
+
+@bp.route("/hotels/search")
+def hotels_search():
+    """Search hotels via provider stub (extendable with real API)."""
+    try:
+        city = request.args.get("city", "").strip()
+        check_in = request.args.get("check_in", "").strip() or None
+        check_out = request.args.get("check_out", "").strip() or None
+        guests = int(request.args.get("guests", "2") or 2)
+        limit = int(request.args.get("limit", "10") or 10)
+
+        if not city:
+            return jsonify({"success": False, "error": "city is required"}), 400
+
+        items = search_hotels(city=city, check_in=check_in, check_out=check_out, guests=guests, limit=limit)
+        return jsonify({"success": True, "hotels": items})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/flights/search")
+def flights_search():
+    """Search flights via provider stub (extendable with real API)."""
+    try:
+        origin = request.args.get("origin", "").upper().strip()
+        destination = request.args.get("destination", "").upper().strip()
+        departure_date = request.args.get("departure_date", "").strip()
+        return_date = request.args.get("return_date", "").strip() or None
+        adults = int(request.args.get("adults", "1") or 1)
+        limit = int(request.args.get("limit", "10") or 10)
+
+        if not origin or not destination or not departure_date:
+            return jsonify({"success": False, "error": "origin, destination, and departure_date are required"}), 400
+
+        items = search_flights(origin=origin, destination=destination, departure_date=departure_date, return_date=return_date, adults=adults, limit=limit)
+        return jsonify({"success": True, "flights": items})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# Favorites
+@bp.route("/favorites", methods=["GET"]) 
+def list_favorites():
+    email = request.args.get("email", "").strip() or None
+    q = Favorite.query
+    if email:
+        q = q.filter(Favorite.user_email == email)
+    items = [f.to_dict() for f in q.order_by(Favorite.created_at.desc()).limit(200).all()]
+    return jsonify({"success": True, "favorites": items})
+
+
+@bp.route("/favorites", methods=["POST"]) 
+def add_favorite():
+    try:
+        data = request.get_json() or {}
+        fav = Favorite(
+            user_email=(data.get("email") or "").strip() or None,
+            title=data.get("title") or "",
+            venue=data.get("venue"),
+            city=data.get("city"),
+            url=data.get("url"),
+            image_url=data.get("image_url"),
+            provider=data.get("provider"),
+        )
+        # parse date/time if provided
+        try:
+            if data.get("date"):
+                fav.date = datetime.fromisoformat(data["date"]).date()
+        except Exception:
+            pass
+        try:
+            if data.get("time"):
+                fav.time = datetime.strptime(data["time"], "%H:%M").time()
+        except Exception:
+            pass
+
+        db.session.add(fav)
+        db.session.commit()
+        return jsonify({"success": True, "favorite": fav.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/favorites/<int:fav_id>", methods=["DELETE"]) 
+def delete_favorite(fav_id: int):
+    try:
+        fav = Favorite.query.get_or_404(fav_id)
+        db.session.delete(fav)
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ICS calendar export for a single event from DB
+@bp.route("/events/<int:event_id>/ics")
+def export_event_ics(event_id: int):
+    try:
+        event = Event.query.get_or_404(event_id)
+        dt = event.date.isoformat() if event.date else ""
+        tm = event.time.strftime("%H%M00") if event.time else "000000"
+        uid = f"voyagerai-event-{event.id}"
+        ics = "\r\n".join([
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            "PRODID:-//VoyagerAI//Events//EN",
+            "BEGIN:VEVENT",
+            f"UID:{uid}",
+            f"DTSTAMP:{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}",
+            f"DTSTART:{dt.replace('-', '')}T{tm}",
+            f"SUMMARY:{event.title}",
+            f"LOCATION:{(event.venue or '')} {('' if not event.city else event.city)}",
+            f"URL:{event.url or ''}",
+            "END:VEVENT",
+            "END:VCALENDAR",
+        ])
+        return (
+            ics,
+            200,
+            {
+                "Content-Type": "text/calendar; charset=utf-8",
+                "Content-Disposition": f"attachment; filename=event-{event_id}.ics",
+            },
+        )
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500

@@ -114,3 +114,95 @@ try:
 except Exception:
     # Mongo not configured; leave SQLAlchemy-only functionality
     pass
+
+
+class Hotel(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(300), nullable=False)
+    city = db.Column(db.String(120), nullable=True)
+    address = db.Column(db.String(500), nullable=True)
+    rating = db.Column(db.Float, nullable=True)
+    price_per_night = db.Column(db.String(50), nullable=True)
+    url = db.Column(db.String(1000), nullable=True)
+    check_in = db.Column(db.Date, nullable=True)
+    check_out = db.Column(db.Date, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "city": self.city,
+            "address": self.address,
+            "rating": self.rating,
+            "price_per_night": self.price_per_night,
+            "url": self.url,
+            "check_in": self.check_in.isoformat() if self.check_in else None,
+            "check_out": self.check_out.isoformat() if self.check_out else None,
+        }
+
+
+class Flight(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    origin = db.Column(db.String(10), nullable=False)
+    destination = db.Column(db.String(10), nullable=False)
+    departure_date = db.Column(db.Date, nullable=False)
+    return_date = db.Column(db.Date, nullable=True)
+    airline = db.Column(db.String(120), nullable=True)
+    flight_number = db.Column(db.String(50), nullable=True)
+    price = db.Column(db.String(50), nullable=True)
+    url = db.Column(db.String(1000), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "origin": self.origin,
+            "destination": self.destination,
+            "departure_date": self.departure_date.isoformat() if self.departure_date else None,
+            "return_date": self.return_date.isoformat() if self.return_date else None,
+            "airline": self.airline,
+            "flight_number": self.flight_number,
+            "price": self.price,
+            "url": self.url,
+        }
+
+
+class EventImage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
+    url = db.Column(db.String(1000), nullable=False)
+    source = db.Column(db.String(50), nullable=True)  # e.g., 'pixabay'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class Favorite(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    # If not authenticated, allow storing by email or anonymous token later
+    user_email = db.Column(db.String(200), nullable=True)
+    # Store minimal event snapshot for external events also
+    title = db.Column(db.String(500), nullable=False)
+    date = db.Column(db.Date, nullable=True)
+    time = db.Column(db.Time, nullable=True)
+    venue = db.Column(db.String(200), nullable=True)
+    city = db.Column(db.String(100), nullable=True)
+    url = db.Column(db.String(1000), nullable=True)
+    image_url = db.Column(db.String(1000), nullable=True)
+    provider = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_email": self.user_email,
+            "title": self.title,
+            "date": self.date.isoformat() if self.date else None,
+            "time": self.time.strftime("%H:%M") if self.time else None,
+            "venue": self.venue,
+            "city": self.city,
+            "url": self.url,
+            "image_url": self.image_url,
+            "provider": self.provider,
+            "created_at": self.created_at.isoformat()
+        }
+

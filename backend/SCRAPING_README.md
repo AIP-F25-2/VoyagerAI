@@ -87,6 +87,20 @@ Fetch from external APIs (Ticketmaster & Eventbrite)
 - `city` - City filter
 - `size` - Number of results
 
+### Hotels & Flights (New)
+
+#### `/hotels/search` (GET)
+Parameters:
+- `city` (required)
+- `check_in`, `check_out`, `guests`, `limit`
+
+#### `/flights/search` (GET)
+Parameters:
+- `origin` (required IATA)
+- `destination` (required IATA)
+- `departure_date` (required, YYYY-MM-DD)
+- `return_date`, `adults`, `limit`
+
 ## 🛠️ Installation & Setup
 
 ### Dependencies
