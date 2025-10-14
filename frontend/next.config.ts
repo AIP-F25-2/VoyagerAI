@@ -13,6 +13,8 @@ const nextConfig = {
       { protocol: "https", hostname: "s1.ticketm.net" },
       { protocol: "https", hostname: "img.evbuc.com" },
       { protocol: "https", hostname: "cdn.evbstatic.com" },
+      { protocol: "https", hostname: "pixabay.com" },
+      { protocol: "https", hostname: "cdn.pixabay.com" },
     ],
   },
 };

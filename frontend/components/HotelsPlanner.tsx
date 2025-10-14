@@ -8,11 +8,28 @@ export default function HotelsPlanner() {
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [guests, setGuests] = useState(2);
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const onSearch = () => {
-    // Placeholder for future integration with hotels API
-    // Intentionally no-op for now
-    console.log({ city, checkIn, checkOut, guests });
+    setLoading(true);
+    setError(null);
+    setResults([]);
+    const params = new URLSearchParams();
+    if (city) params.set("city", city);
+    if (checkIn) params.set("check_in", checkIn);
+    if (checkOut) params.set("check_out", checkOut);
+    if (guests) params.set("guests", String(guests));
+
+    fetch(`/api/hotels/search?${params.toString()}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.success) throw new Error(data.error || "Failed to fetch hotels");
+        setResults(data.hotels || []);
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
   };
 
   return (
@@ -39,6 +56,25 @@ export default function HotelsPlanner() {
       <div className={styles.actions}>
         <button className={styles.primaryBtn} onClick={onSearch}>Search Hotels</button>
       </div>
+      {loading && <div className={styles.loading}>Searching…</div>}
+      {error && <div className={styles.error}>Error: {error}</div>}
+      {!loading && !error && results?.length > 0 && (
+        <div className={styles.list}>
+          {results.map((h) => (
+            <div key={h.id} className={styles.item}>
+              <div className={styles.itemHeader}>
+                <div className={styles.itemTitle}>{h.name}</div>
+                <div className={styles.itemPrice}>{h.price_per_night}</div>
+              </div>
+              <div className={styles.itemMeta}>{h.address}</div>
+              <div className={styles.itemMeta}>Rating: {h.rating ?? "-"}</div>
+              {h.url && (
+                <a className={styles.itemLink} href={h.url} target="_blank" rel="noreferrer">View</a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
