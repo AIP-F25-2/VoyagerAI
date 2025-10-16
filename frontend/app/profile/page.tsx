@@ -2,6 +2,8 @@
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
+import SubscriptionStatus from "@/components/SubscriptionStatus";
+import EventReviews from "@/components/EventReviews";
 
 interface Favorite {
   id: number;
@@ -99,6 +101,19 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        {/* Subscription Status */}
+        <SubscriptionStatus />
+
+        {/* Your Reviews */}
+        <div className="bg-gray-800/50 p-6 rounded-lg mb-8">
+          <h2 className="text-2xl font-bold mb-6">Your Reviews</h2>
+          <EventReviews
+            eventTitle=""
+            userEmail={user?.email}
+          />
+        </div>
+
+        {/* Saved Events */}
         <div className="bg-gray-800/50 p-6 rounded-lg">
           <h2 className="text-2xl font-bold mb-6">Your Saved Events</h2>
           {loading ? (

@@ -109,6 +109,8 @@
 import { useEffect, useState } from "react";
 import SearchBar from "@/components/ui/SearchBar";
 import EventsSection from "@/components/ui/EventsSection";
+import AdvancedFilters from "@/components/AdvancedFilters";
+import Recommendations from "@/components/Recommendations";
 import { MusicalNoteIcon, TrophyIcon, TicketIcon, SparklesIcon } from "@heroicons/react/24/solid";
 
 export default function HomePage() {
@@ -119,6 +121,8 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [city, setCity] = useState("");
+  const [filters, setFilters] = useState<any>({});
+  const [showRecommendations, setShowRecommendations] = useState(true);
 
   // Get user's location using Geolocation + reverse geocoding
   const fetchUserCity = async () => {
@@ -142,13 +146,20 @@ export default function HomePage() {
     );
   };
 
-  const loadEvents = async (search: string, detectedCity = "") => {
+  const loadEvents = async (search: string, detectedCity = "", appliedFilters = {}) => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
       if (search) params.append("q", search);
       if (detectedCity) params.append("city", detectedCity);
+      
+      // Add filter parameters
+      Object.entries(appliedFilters).forEach(([key, value]) => {
+        if (value && value !== "") {
+          params.append(key, value as string);
+        }
+      });
 
       const res = await fetch(`/api/events?${params.toString()}`);
       if (!res.ok) throw new Error("Backend unavailable or API error");
@@ -172,15 +183,20 @@ export default function HomePage() {
 
   useEffect(() => {
     if (city) {
-      loadEvents(query, city);
+      loadEvents(query, city, filters);
     } else {
-      loadEvents(query); // fallback without location
+      loadEvents(query, "", filters); // fallback without location
     }
-  }, [city]);
+  }, [city, filters]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    loadEvents(query, city);
+    loadEvents(query, city, filters);
+  };
+
+  const handleFiltersChange = (newFilters: any) => {
+    setFilters(newFilters);
+    loadEvents(query, city, newFilters);
   };
 
   const categories = [
@@ -214,7 +230,7 @@ export default function HomePage() {
               <button
                 key={cat.label}
                 className="group flex items-center gap-2 px-6 py-2 rounded-xl glass-light hover:bg-blue-600/40 hover:shadow-glow hover:cursor-pointer hover:scale-105 transition-all duration-300"
-                onClick={() => loadEvents(cat.label, city)}
+                onClick={() => loadEvents(cat.label, city, filters)}
               >
                 <cat.icon className="h-5 w-5 text-neutral-300 group-hover:text-white transition" />
                 <span className="text-neutral-300 font-medium group-hover:text-white">{cat.label}</span>
@@ -223,6 +239,26 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Advanced Filters */}
+      <div className="mx-auto max-w-6xl px-4">
+        <AdvancedFilters
+          onFiltersChange={handleFiltersChange}
+          onSearch={handleSearch}
+        />
+      </div>
+
+      {/* Recommendations */}
+      {showRecommendations && (
+        <div className="mx-auto max-w-6xl px-4 mb-8">
+          <Recommendations
+            onEventClick={(event) => {
+              // Handle event click - could open details or add to favorites
+              console.log("Recommended event clicked:", event);
+            }}
+          />
+        </div>
+      )}
 
       {/* Results */}
       <div className="mx-auto max-w-6xl px-4 py-10">

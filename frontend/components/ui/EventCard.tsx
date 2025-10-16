@@ -2,6 +2,7 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import EventSharing from "../EventSharing";
 
 type EventCardProps = {
   event: any;
@@ -89,39 +90,92 @@ export default function EventCard({ event, provider }: EventCardProps) {
         🎟 Buy Tickets ({provider})
       </a>
       <button
-        onClick={async () => {
+        onClick={() => {
           try {
-            if (!isAuthenticated) {
-              alert("Please sign in to save favorites.");
-              window.location.href = "/login";
-              return;
-            }
-            const body = {
-              email: user?.email || null,
-              title,
-              date: event?.dates?.start?.localDate || null,
-              time: event?.dates?.start?.localTime || null,
-              venue: venue?.name || null,
-              city: venue?.city?.name || null,
-              url: event?.url || null,
-              image_url: imageUrlForSave || null,
-              provider: providerLabel,
-            };
-            await fetch("/api/favorites", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body),
-            });
-            // naive UX: temporary text swap
-            alert("Saved to Favorites");
-          } catch (e) {
-            alert("Failed to save");
-          }
+            const d = event?.dates?.start?.localDate?.replaceAll('-', '') || ''
+            const t = (event?.dates?.start?.localTime ? event.dates.start.localTime.replace(':','') + '00' : '000000')
+            const ics = [
+              'BEGIN:VCALENDAR',
+              'VERSION:2.0',
+              'PRODID:-//VoyagerAI//Events//EN',
+              'BEGIN:VEVENT',
+              `UID:client-${(event?.id || Math.random()).toString()}`,
+              `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
+              `DTSTART:${d}T${t}`,
+              `SUMMARY:${event?.name || title}`,
+              `LOCATION:${venue?.name || ''} ${venue?.city?.name || ''}`,
+              `URL:${event?.url || ''}`,
+              'END:VEVENT',
+              'END:VCALENDAR'
+            ].join('\r\n')
+            const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8;' })
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement('a')
+            link.href = url
+            link.download = `event-${event?.id || 'voyagerai'}.ics`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(url)
+          } catch {}
         }}
         className="mt-2 inline-block w-full text-center px-5 py-2 font-semibold rounded-lg text-white border glass-light border-neutral-800 bg-neutral-900/60 hover:bg-neutral-800/80 duration-300 transition"
       >
-        ⭐ Save
+        📆 Add to Calendar
       </button>
+      <div className="mt-2 flex gap-2">
+        <button
+          onClick={async () => {
+            try {
+              if (!isAuthenticated) {
+                alert("Please sign in to save favorites.");
+                window.location.href = "/login";
+                return;
+              }
+              const body = {
+                email: user?.email || null,
+                title,
+                date: event?.dates?.start?.localDate || null,
+                time: event?.dates?.start?.localTime || null,
+                venue: venue?.name || null,
+                city: venue?.city?.name || null,
+                url: event?.url || null,
+                image_url: imageUrlForSave || null,
+                provider: providerLabel,
+              };
+              const resp = await fetch("/api/favorites", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+              });
+              if (resp.status === 409) {
+                alert("Already saved to Favorites");
+                return;
+              }
+              if (!resp.ok) {
+                throw new Error("Failed to save");
+              }
+              alert("Saved to Favorites");
+            } catch (e) {
+              alert("Failed to save");
+            }
+          }}
+          className="flex-1 text-center px-3 py-2 font-semibold rounded-lg text-white border glass-light border-neutral-800 bg-neutral-900/60 hover:bg-neutral-800/80 duration-300 transition"
+        >
+          ⭐ Save
+        </button>
+        
+        <EventSharing
+          event={{
+            title,
+            venue: venue?.name,
+            city: venue?.city?.name,
+            date: event?.dates?.start?.localDate,
+            url: event?.url
+          }}
+          userEmail={user?.email}
+        />
+      </div>
     </div>
   );
 }

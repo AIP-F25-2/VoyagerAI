@@ -88,7 +88,10 @@ export default function AuthForm({ mode, onSubmit }: AuthFormProps) {
 
           <div className={styles.helperRow}>
             {mode === 'login' ? (
-              <span className={styles.hint}>No account? <Link className={styles.helperLink} href="/signup">Sign up</Link></span>
+              <>
+                <span className={styles.hint}>No account? <Link className={styles.helperLink} href="/signup">Sign up</Link></span>
+                <Link className={styles.helperLink} href="/forgot-password">Forgot password?</Link>
+              </>
             ) : (
               <span className={styles.hint}>Already have an account? <Link className={styles.helperLink} href="/login">Log in</Link></span>
             )}

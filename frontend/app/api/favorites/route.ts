@@ -5,7 +5,7 @@ export async function GET(req: Request) {
   const email = url.searchParams.get("email") || "";
   const res = await fetch(`http://127.0.0.1:5000/api/favorites?email=${encodeURIComponent(email)}`);
   const data = await res.json();
-  return NextResponse.json(data);
+  return NextResponse.json(data, { status: res.status });
 }
 
 export async function POST(req: Request) {
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     body: JSON.stringify(body),
   });
   const data = await res.json();
-  return NextResponse.json(data);
+  return NextResponse.json(data, { status: res.status });
 }
 
 

@@ -22,7 +22,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Check for existing token on mount
   useEffect(() => {
+    // Only run on client side
+    if (typeof window === 'undefined') return;
+    
     const storedToken = localStorage.getItem('voyagerai_token');
+    console.log('AuthContext: Checking stored token:', storedToken ? 'Found' : 'Not found');
+    
     if (storedToken) {
       verifyStoredToken(storedToken);
     } else {
@@ -32,16 +37,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verifyStoredToken = async (storedToken: string) => {
     try {
+      console.log('AuthContext: Verifying token...');
       const response = await verifyToken(storedToken);
+      console.log('AuthContext: Token verification response:', response);
+      
       if (response.success && response.user) {
+        console.log('AuthContext: Token valid, setting user:', response.user);
         setToken(storedToken);
         setUser(response.user);
       } else {
+        console.log('AuthContext: Token invalid, removing from localStorage');
         // Token is invalid, remove it
         localStorage.removeItem('voyagerai_token');
       }
     } catch (error) {
-      console.error('Token verification failed:', error);
+      console.error('AuthContext: Token verification failed:', error);
       localStorage.removeItem('voyagerai_token');
     } finally {
       setIsLoading(false);
@@ -50,16 +60,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const handleLogin = async (email: string, password: string) => {
     try {
+      console.log('AuthContext: Attempting login for:', email);
       const response = await login(email, password);
+      console.log('AuthContext: Login response:', response);
+      
       if (response.success && response.token && response.user) {
+        console.log('AuthContext: Login successful, storing token and user');
         setToken(response.token);
         setUser(response.user);
         localStorage.setItem('voyagerai_token', response.token);
         return { success: true };
       } else {
+        console.log('AuthContext: Login failed:', response.message);
         return { success: false, message: response.message || 'Login failed' };
       }
     } catch (error) {
+      console.error('AuthContext: Login error:', error);
       return { success: false, message: 'Network error' };
     }
   };
