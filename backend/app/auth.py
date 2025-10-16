@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify
 from functools import wraps
 from .models import db, User
+from .services.email_service import email_service
+from datetime import datetime
 import re
 
 auth_bp = Blueprint("auth", __name__)
@@ -80,17 +82,28 @@ def signup():
         user = User(name=name, email=email)
         user.set_password(password)
         
+        # Generate verification token
+        verification_token = user.generate_verification_token()
+        
         db.session.add(user)
         db.session.commit()
         
-        # Generate token
+        # Send verification email
+        email_sent = email_service.send_verification_email(
+            user_email=user.email,
+            user_name=user.name,
+            verification_token=verification_token
+        )
+        
+        # Generate auth token
         token = user.generate_token()
         
         return jsonify({
             "success": True,
-            "message": "User created successfully",
+            "message": "User created successfully. Please check your email to verify your account.",
             "token": token,
-            "user": user.to_dict()
+            "user": user.to_dict(),
+            "email_sent": email_sent
         }), 201
         
     except Exception as e:
@@ -249,3 +262,154 @@ def verify_token():
         
     except Exception as e:
         return jsonify({"success": False, "message": f"Error verifying token: {str(e)}"}), 500
+
+@auth_bp.route("/verify-email", methods=["POST"])
+def verify_email():
+    """Verify user email with token"""
+    try:
+        data = request.get_json()
+        token = data.get("token", "")
+        
+        if not token:
+            return jsonify({"success": False, "message": "Verification token is required"}), 400
+        
+        user = User.verify_token(token, 'email_verification')
+        if not user:
+            return jsonify({"success": False, "message": "Invalid or expired verification token"}), 400
+        
+        if user.is_verified:
+            return jsonify({"success": True, "message": "Email already verified"}), 200
+        
+        # Mark user as verified
+        user.is_verified = True
+        user.email_verification_token = None
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Email verified successfully",
+            "user": user.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Error verifying email: {str(e)}"}), 500
+
+@auth_bp.route("/resend-verification", methods=["POST"])
+def resend_verification():
+    """Resend email verification"""
+    try:
+        data = request.get_json()
+        email = data.get("email", "").strip().lower()
+        
+        if not email:
+            return jsonify({"success": False, "message": "Email is required"}), 400
+        
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({"success": False, "message": "User not found"}), 404
+        
+        if user.is_verified:
+            return jsonify({"success": False, "message": "Email already verified"}), 400
+        
+        # Generate new verification token
+        verification_token = user.generate_verification_token()
+        db.session.commit()
+        
+        # Send verification email
+        email_sent = email_service.send_verification_email(
+            user_email=user.email,
+            user_name=user.name,
+            verification_token=verification_token
+        )
+        
+        return jsonify({
+            "success": True,
+            "message": "Verification email sent",
+            "email_sent": email_sent
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Error resending verification: {str(e)}"}), 500
+
+@auth_bp.route("/forgot-password", methods=["POST"])
+def forgot_password():
+    """Send password reset email"""
+    try:
+        data = request.get_json()
+        email = data.get("email", "").strip().lower()
+        
+        if not email:
+            return jsonify({"success": False, "message": "Email is required"}), 400
+        
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            # Don't reveal if user exists or not for security
+            return jsonify({
+                "success": True,
+                "message": "If an account with that email exists, a password reset link has been sent"
+            }), 200
+        
+        # Generate password reset token
+        reset_token = user.generate_password_reset_token()
+        db.session.commit()
+        
+        # Send password reset email
+        email_sent = email_service.send_password_reset_email(
+            user_email=user.email,
+            user_name=user.name,
+            reset_token=reset_token
+        )
+        
+        return jsonify({
+            "success": True,
+            "message": "If an account with that email exists, a password reset link has been sent",
+            "email_sent": email_sent
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Error sending password reset: {str(e)}"}), 500
+
+@auth_bp.route("/reset-password", methods=["POST"])
+def reset_password():
+    """Reset password with token"""
+    try:
+        data = request.get_json()
+        token = data.get("token", "")
+        new_password = data.get("password", "")
+        
+        if not token:
+            return jsonify({"success": False, "message": "Reset token is required"}), 400
+        
+        if not new_password:
+            return jsonify({"success": False, "message": "New password is required"}), 400
+        
+        # Validate new password
+        is_valid, message = validate_password(new_password)
+        if not is_valid:
+            return jsonify({"success": False, "message": message}), 400
+        
+        user = User.verify_token(token, 'password_reset')
+        if not user:
+            return jsonify({"success": False, "message": "Invalid or expired reset token"}), 400
+        
+        # Check if reset token is still valid
+        if user.password_reset_expires and user.password_reset_expires < datetime.utcnow():
+            return jsonify({"success": False, "message": "Reset token has expired"}), 400
+        
+        # Update password and clear reset token
+        user.set_password(new_password)
+        user.password_reset_token = None
+        user.password_reset_expires = None
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Password reset successfully"
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"Error resetting password: {str(e)}"}), 500

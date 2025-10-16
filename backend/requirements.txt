@@ -1,5 +1,7 @@
 flask==3.0.0
 flask-cors==4.0.0
+flask-limiter==3.5.1
+flask-caching==2.3.0
 flask-sqlalchemy==3.1.1
 sqlalchemy==2.0.43
 psycopg2-binary==2.9.9
@@ -10,6 +12,9 @@ werkzeug==3.0.1
 
 requests==2.32.3
 python-dotenv==1.0.1
+sentry-sdk==2.14.0
+
+# Email dependencies (using built-in smtplib)
 
 # External providers storage support
 pymongo==4.10.1
