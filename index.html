@@ -1,152 +1,45 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BookMyShow Events</title>
-  <style>
-    :root { --bg:#0f1117; --card:#161b22; --text:#e6edf3; --muted:#9da7b3; --accent:#2f81f7; --border:#30363d; }
-    * { box-sizing: border-box; }
-    body { margin:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-    header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    h1 { margin:0; font-size:18px; }
-    .search { flex:1 1 360px; display:flex; gap:8px; }
-    .input { width:100%; padding:10px 12px; border:1px solid var(--border); background:#0b1020; color:var(--text); border-radius:10px; }
-    .btn   { padding:10px 12px; border:1px solid var(--border); color:var(--text); background:var(--card); border-radius:10px; cursor:pointer; }
-    main { max-width:1000px; margin:0 auto; padding:16px; }
-    .meta { color:var(--muted); font-size:12px; margin-top:4px; }
-    .list { display:grid; gap:10px; margin-top:12px; }
-    .item { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; display:flex; gap:12px; align-items:flex-start; }
-    .title { font-weight:600; margin:0 0 4px 0; }
-    .grow { flex:1; }
-    .tag { display:inline-block; padding:4px 8px; border:1px solid var(--border); border-radius:999px; color:var(--muted); font-size:12px; margin-right:6px; }
-    .link { text-decoration:none; color:#fff; background:var(--accent); border-radius:10px; padding:8px 10px; font-weight:600; }
-    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    .count { color:var(--muted); font-size:12px; margin-left:auto; }
-    .footer { color:var(--muted); font-size:12px; text-align:center; padding:18px 0 32px; }
-  </style>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <meta charset="UTF-8">
+  <title>Skyscanner Flight Scraper</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body>
-  <header>
-    <h1>BookMyShow Events</h1>
-    <div class="search">
-      <input id="q" class="input" placeholder="Search events (title, place, venue, price)..." />
-      <button id="clear" class="btn" title="Clear search">Clear</button>
-    </div>
-    <label class="btn" for="file" title="Upload a CSV manually">Upload CSV</label>
-    <input id="file" type="file" accept=".csv" style="display:none" />
-  </header>
-
-  <main>
-    <div class="row">
-      <div id="status" class="meta">Looking for events.csv in this folder…</div>
-      <div class="count" id="count"></div>
-    </div>
-    <div id="list" class="list"></div>
-    <p class="footer">Tip: if the browser blocks local fetch, run <code>python -m http.server 8000</code> and open <code>http://127.0.0.1:8000/</code>.</p>
-  </main>
+<body class="bg-light">
+  <div class="container py-4">
+    <h2 class="mb-3">Skyscanner Flight Scraper</h2>
+    <button id="fetchBtn" class="btn btn-primary mb-3">Fetch Flights</button>
+    <div id="output" class="border bg-white p-3 rounded" style="min-height:200px;"></div>
+  </div>
 
   <script>
-    const el = id => document.getElementById(id);
-    const state = { rows: [], filtered: [] };
-
-    // Normalize CSV row keys (case-insensitive, map common variants)
-    function normalize(row){
-      const m = {}; for(const k in row){ m[k.toLowerCase()] = row[k]; }
-      return {
-        title: m.title ?? m.name ?? "",
-        date:  m.date ?? "",
-        time:  m.time ?? "",
-        place: m.place ?? m.city ?? "",
-        venue: m.venue ?? m.venue_name ?? "",
-        price: m.price ?? "",
-        url:   m.url ?? m.link ?? ""
-      };
-    }
-
-    function render(){
-      const list = el('list');
-      const rows = state.filtered;
-      el('count').textContent = rows.length ? `${rows.length} events` : '';
-      list.innerHTML = rows.map(r => {
-        const when = [r.date, r.time].filter(Boolean).join(" · ");
-        const where = [r.venue, r.place].filter(Boolean).join(" · ");
-        return `
-          <div class="item">
-            <div class="grow">
-              <h3 class="title">${escapeHtml(r.title || '(untitled)')}</h3>
-              <div class="meta">${escapeHtml(when)}</div>
-              <div class="meta">${escapeHtml(where)}</div>
-              <div style="margin-top:8px">
-                ${r.price ? `<span class="tag">${escapeHtml(r.price)}</span>` : ``}
-                ${r.place ? `<span class="tag">${escapeHtml(r.place)}</span>` : ``}
-                ${r.venue ? `<span class="tag">${escapeHtml(r.venue)}</span>` : ``}
-              </div>
-            </div>
-            ${r.url ? `<a class="link" href="${escapeAttr(r.url)}" target="_blank" rel="noopener">Open</a>` : ``}
-          </div>
-        `;
-      }).join('');
-    }
-
-    function escapeHtml(s){
-      return (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-    }
-    function escapeAttr(s){
-      return (s ?? '').toString().replace(/["']/g, c => ({'"':'&quot;', "'":'&#39;'}[c]));
-    }
-
-    function applyFilter(){
-      const q = el('q').value.trim().toLowerCase();
-      state.filtered = state.rows.filter(r => {
-        if (!q) return true;
-        const hay = [
-          r.title, r.place, r.venue, r.price, r.date, r.time
-        ].map(v => (v||"").toString().toLowerCase()).join(" ");
-        return hay.includes(q);
-      });
-      render();
-    }
-
-    function loadRows(data){
-      const normalized = data.map(normalize);
-      state.rows = normalized;
-      state.filtered = normalized;
-      el('status').textContent = `Loaded ${normalized.length} events.`;
-      applyFilter();
-    }
-
-    // Auto-load events.csv if present
-    window.addEventListener('DOMContentLoaded', async () => {
+    async function fetchFlights() {
+      const box = document.getElementById('output');
+      box.innerHTML = '<p>Loading flights...</p>';
       try {
-        const resp = await fetch('events.csv', { cache: 'no-store' });
-        if (resp.ok) {
-          const text = await resp.text();
-          const parsed = Papa.parse(text, { header:true, skipEmptyLines:true });
-          if (parsed.data && parsed.data.length) {
-            loadRows(parsed.data);
-            return;
-          }
+        const res = await fetch('/api/flights');
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) {
+          box.innerHTML = '<p>No flights found.</p>';
+          return;
         }
-        el('status').textContent = 'Upload a CSV or place events.csv next to this page.';
-      } catch {
-        el('status').textContent = 'Upload a CSV or place events.csv next to this page.';
+        let html = '<table class="table table-bordered table-sm"><thead><tr>';
+        Object.keys(data[0]).forEach(k => html += `<th>${k}</th>`);
+        html += '</tr></thead><tbody>';
+        data.forEach(row => {
+          html += '<tr>';
+          Object.values(row).forEach(v => html += `<td>${v ?? ''}</td>`);
+          html += '</tr>';
+        });
+        html += '</tbody></table>';
+        box.innerHTML = html;
+      } catch (err) {
+        box.innerHTML = `<p class="text-danger">Error: ${err}</p>`;
       }
-    });
+    }
 
-    // Search interactions
-    el('q').addEventListener('input', applyFilter);
-    el('clear').addEventListener('click', () => { el('q').value = ''; applyFilter(); });
-
-    // Manual CSV upload
-    el('file').addEventListener('change', (e) => {
-      const file = e.target.files[0]; if (!file) return;
-      Papa.parse(file, {
-        header: true, skipEmptyLines: true,
-        complete: (res) => loadRows(res.data || [])
-      });
-    });
+    document.getElementById('fetchBtn').addEventListener('click', fetchFlights);
   </script>
 </body>
 </html>
