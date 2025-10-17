@@ -17,6 +17,7 @@ from .services.csv_loader import csv_loader
 from .services.images import search_pixabay_image
 from datetime import datetime, date, timedelta
 from io import StringIO
+import os
 
 bp = Blueprint("api", __name__)
 
