@@ -22,7 +22,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Check for existing token on mount
   useEffect(() => {
-    const storedToken = localStorage.getItem('voyagerai_token');
+    // Only run on client side
+    if (typeof window === 'undefined') return;
+    
+    const storedToken = localStorage.getItem('travelplanner_token');
     if (storedToken) {
       verifyStoredToken(storedToken);
     } else {
@@ -38,11 +41,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(response.user);
       } else {
         // Token is invalid, remove it
-        localStorage.removeItem('voyagerai_token');
+        localStorage.removeItem('travelplanner_token');
       }
     } catch (error) {
       console.error('Token verification failed:', error);
-      localStorage.removeItem('voyagerai_token');
+      localStorage.removeItem('travelplanner_token');
     } finally {
       setIsLoading(false);
     }
@@ -54,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.success && response.token && response.user) {
         setToken(response.token);
         setUser(response.user);
-        localStorage.setItem('voyagerai_token', response.token);
+        localStorage.setItem('travelplanner_token', response.token);
         return { success: true };
       } else {
         return { success: false, message: response.message || 'Login failed' };
@@ -70,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.success && response.token && response.user) {
         setToken(response.token);
         setUser(response.user);
-        localStorage.setItem('voyagerai_token', response.token);
+        localStorage.setItem('travelplanner_token', response.token);
         return { success: true };
       } else {
         return { success: false, message: response.message || 'Signup failed' };
@@ -83,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem('voyagerai_token');
+    localStorage.removeItem('travelplanner_token');
   };
 
   const value: AuthContextType = {
