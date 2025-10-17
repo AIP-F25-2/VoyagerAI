@@ -16,6 +16,12 @@ export default function Header() {
         {isAuthenticated ? (
           <>
             <Link 
+              href="/travel-plans"
+              className="px-4 py-1.5 border border-white/30 text-white rounded-xl hover:bg-white/20 transition hover:cursor-pointer"
+            >
+              🗺️ Travel Plans
+            </Link>
+            <Link 
               href="/profile"
               className="px-4 py-1.5 border border-white/30 text-white rounded-xl hover:bg-white/20 transition hover:cursor-pointer"
             >

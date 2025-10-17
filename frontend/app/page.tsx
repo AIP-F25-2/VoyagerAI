@@ -111,6 +111,7 @@ import SearchBar from "@/components/ui/SearchBar";
 import EventsSection from "@/components/ui/EventsSection";
 import AdvancedFilters from "@/components/AdvancedFilters";
 import Recommendations from "@/components/Recommendations";
+import FlightsPlanner from "@/components/FlightsPlanner";
 import { MusicalNoteIcon, TrophyIcon, TicketIcon, SparklesIcon } from "@heroicons/react/24/solid";
 
 export default function HomePage() {
@@ -246,6 +247,23 @@ export default function HomePage() {
           onFiltersChange={handleFiltersChange}
           onSearch={handleSearch}
         />
+      </div>
+
+      {/* Travel Planning Section */}
+      <div className="mx-auto max-w-6xl px-4 py-10">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="bg-gray-800/30 rounded-2xl p-6">
+            <h2 className="text-2xl font-bold mb-4 text-center">✈️ Find Flights</h2>
+            <FlightsPlanner />
+          </div>
+          <div className="bg-gray-800/30 rounded-2xl p-6">
+            <h2 className="text-2xl font-bold mb-4 text-center">🏨 Book Hotels</h2>
+            <div className="text-center text-gray-400">
+              <p className="mb-4">Hotel search functionality is available in the main events page.</p>
+              <p className="text-sm">You can add hotels to your travel plans from the search results.</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Recommendations */}

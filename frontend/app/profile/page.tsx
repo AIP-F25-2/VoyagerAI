@@ -86,10 +86,18 @@ export default function ProfilePage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-gray-800/50 p-6 rounded-lg">
             <h3 className="text-xl font-semibold mb-2">📅 Saved Events</h3>
             <p className="text-3xl font-bold text-blue-400">{favorites.length}</p>
+          </div>
+          <div className="bg-gray-800/50 p-6 rounded-lg">
+            <h3 className="text-xl font-semibold mb-2">🗺️ Travel Plans</h3>
+            <p className="text-3xl font-bold text-green-400">
+                <a href="/travel-plans" className="hover:text-green-300 transition-colors">
+                View
+              </a>
+            </p>
           </div>
           <div className="bg-gray-800/50 p-6 rounded-lg">
             <h3 className="text-xl font-semibold mb-2">🏆 Active</h3>
@@ -98,6 +106,29 @@ export default function ProfilePage() {
           <div className="bg-gray-800/50 p-6 rounded-lg">
             <h3 className="text-xl font-semibold mb-2">🎯 Account Type</h3>
             <p className="text-3xl font-bold text-purple-400">Free</p>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="bg-gray-800/50 p-6 rounded-lg mb-8">
+          <h2 className="text-2xl font-bold mb-6">Quick Actions</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <a
+              href="/travel-plans"
+              className="bg-blue-600 hover:bg-blue-700 p-4 rounded-lg text-center transition-colors"
+            >
+              <div className="text-2xl mb-2">🗺️</div>
+              <h3 className="font-semibold">Manage Travel Plans</h3>
+              <p className="text-sm text-gray-300">Plan and organize your trips</p>
+            </a>
+            <a
+              href="/"
+              className="bg-green-600 hover:bg-green-700 p-4 rounded-lg text-center transition-colors"
+            >
+              <div className="text-2xl mb-2">🎵</div>
+              <h3 className="font-semibold">Discover Events</h3>
+              <p className="text-sm text-gray-300">Find new events to attend</p>
+            </a>
           </div>
         </div>
 
