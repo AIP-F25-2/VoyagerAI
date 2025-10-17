@@ -1,5 +1,6 @@
 import { EventItem } from "@/lib/api";
 import styles from "./EventCard.module.css";
+import AddToItinerary from "./AddToItinerary";
 
 interface Props {
   event: EventItem;
@@ -58,6 +59,18 @@ export default function EventCard({ event }: Props) {
             View
           </a>
         )}
+        <AddToItinerary
+          itemType="event"
+          itemData={{
+            title: event.title,
+            description: `${event.venue ? `Venue: ${event.venue}` : ''}${event.place ? `, Place: ${event.place}` : ''}`,
+            date: event.date,
+            time: event.time,
+            location: event.venue || event.place,
+            price: event.price ? parseFloat(event.price.replace(/[^0-9.-]+/g, '')) : undefined,
+            url: event.url
+          }}
+        />
       </div>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import styles from "./HotelsPlanner.module.css";
+import AddToItinerary from "./AddToItinerary";
 
 export default function HotelsPlanner() {
   const [city, setCity] = useState("");
@@ -68,9 +69,22 @@ export default function HotelsPlanner() {
               </div>
               <div className={styles.itemMeta}>{h.address}</div>
               <div className={styles.itemMeta}>Rating: {h.rating ?? "-"}</div>
-              {h.url && (
-                <a className={styles.itemLink} href={h.url} target="_blank" rel="noreferrer">View</a>
-              )}
+              <div className={styles.itemActions}>
+                {h.url && (
+                  <a className={styles.itemLink} href={h.url} target="_blank" rel="noreferrer">View</a>
+                )}
+                <AddToItinerary
+                  itemType="hotel"
+                  itemData={{
+                    title: h.name,
+                    description: `Address: ${h.address}, Rating: ${h.rating ?? "N/A"}`,
+                    date: h.check_in,
+                    location: h.address,
+                    price: h.price_per_night ? parseFloat(h.price_per_night.replace(/[^0-9.-]+/g, '')) : undefined,
+                    url: h.url
+                  }}
+                />
+              </div>
             </div>
           ))}
         </div>
