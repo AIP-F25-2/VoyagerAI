@@ -262,6 +262,79 @@ class Favorite(db.Model):
         }
 
 
+class Itinerary(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    destination = db.Column(db.String(200), nullable=True)
+    start_date = db.Column(db.Date, nullable=True)
+    end_date = db.Column(db.Date, nullable=True)
+    budget = db.Column(db.Float, nullable=True)
+    status = db.Column(db.String(50), default='draft')  # draft, active, completed, cancelled
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship with user
+    user = db.relationship('User', backref=db.backref('itineraries', lazy=True))
+    
+    # Relationship with itinerary items
+    items = db.relationship('ItineraryItem', backref='itinerary', lazy=True, cascade='all, delete-orphan')
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "title": self.title,
+            "description": self.description,
+            "destination": self.destination,
+            "start_date": self.start_date.isoformat() if self.start_date else None,
+            "end_date": self.end_date.isoformat() if self.end_date else None,
+            "budget": self.budget,
+            "status": self.status,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "items": [item.to_dict() for item in self.items] if self.items else []
+        }
+
+
+class ItineraryItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    itinerary_id = db.Column(db.Integer, db.ForeignKey('itinerary.id'), nullable=False)
+    item_type = db.Column(db.String(50), nullable=False)  # event, hotel, flight, activity, note
+    title = db.Column(db.String(300), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    date = db.Column(db.Date, nullable=True)
+    time = db.Column(db.Time, nullable=True)
+    location = db.Column(db.String(200), nullable=True)
+    price = db.Column(db.Float, nullable=True)
+    url = db.Column(db.String(1000), nullable=True)
+    image_url = db.Column(db.String(1000), nullable=True)
+    status = db.Column(db.String(50), default='planned')  # planned, confirmed, completed, cancelled
+    order_index = db.Column(db.Integer, default=0)  # For ordering items within itinerary
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "itinerary_id": self.itinerary_id,
+            "item_type": self.item_type,
+            "title": self.title,
+            "description": self.description,
+            "date": self.date.isoformat() if self.date else None,
+            "time": self.time.strftime("%H:%M") if self.time else None,
+            "location": self.location,
+            "price": self.price,
+            "url": self.url,
+            "image_url": self.image_url,
+            "status": self.status,
+            "order_index": self.order_index,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat()
+        }
+
+
 class EventShare(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_email = db.Column(db.String(200), nullable=True)

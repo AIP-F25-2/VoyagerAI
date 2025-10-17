@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify, request
-from .models import db, Event, Favorite, EventShare, EventReview, Subscription
+from .models import db, Event, Favorite, EventShare, EventReview, Subscription, Itinerary, ItineraryItem
 from .__init__ import cache, limiter
 from .services.notification_service import notification_service
 from .services.recommendation_service import recommendation_service
@@ -1234,4 +1234,366 @@ def send_daily_digest():
             "message": "Daily digest sent"
         }), 200
     except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# Itinerary endpoints
+@bp.route("/itineraries", methods=["GET"])
+def get_itineraries():
+    """Get user's itineraries"""
+    try:
+        user_id = request.args.get("user_id", type=int)
+        status = request.args.get("status", "").strip()
+        limit = int(request.args.get("limit", 50))
+        
+        if not user_id:
+            return jsonify({"success": False, "error": "user_id is required"}), 400
+        
+        query = Itinerary.query.filter_by(user_id=user_id)
+        
+        if status:
+            query = query.filter_by(status=status)
+        
+        itineraries = query.order_by(Itinerary.updated_at.desc()).limit(limit).all()
+        
+        return jsonify({
+            "success": True,
+            "itineraries": [itinerary.to_dict() for itinerary in itineraries]
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/itineraries", methods=["POST"])
+@limiter.limit("10/minute")
+def create_itinerary():
+    """Create a new itinerary"""
+    try:
+        data = request.get_json() or {}
+        
+        user_id = data.get("user_id")
+        title = data.get("title", "").strip()
+        description = data.get("description", "").strip()
+        destination = data.get("destination", "").strip()
+        start_date = data.get("start_date")
+        end_date = data.get("end_date")
+        budget = data.get("budget")
+        
+        if not user_id:
+            return jsonify({"success": False, "error": "user_id is required"}), 400
+        
+        if not title:
+            return jsonify({"success": False, "error": "title is required"}), 400
+        
+        # Parse dates
+        parsed_start_date = None
+        parsed_end_date = None
+        if start_date:
+            try:
+                parsed_start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+            except ValueError:
+                return jsonify({"success": False, "error": "Invalid start_date format. Use YYYY-MM-DD"}), 400
+        
+        if end_date:
+            try:
+                parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+            except ValueError:
+                return jsonify({"success": False, "error": "Invalid end_date format. Use YYYY-MM-DD"}), 400
+        
+        # Validate date range
+        if parsed_start_date and parsed_end_date and parsed_start_date > parsed_end_date:
+            return jsonify({"success": False, "error": "start_date cannot be after end_date"}), 400
+        
+        itinerary = Itinerary(
+            user_id=user_id,
+            title=title,
+            description=description,
+            destination=destination,
+            start_date=parsed_start_date,
+            end_date=parsed_end_date,
+            budget=budget
+        )
+        
+        db.session.add(itinerary)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Itinerary created successfully",
+            "itinerary": itinerary.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/itineraries/<int:itinerary_id>", methods=["GET"])
+def get_itinerary(itinerary_id):
+    """Get a specific itinerary with its items"""
+    try:
+        itinerary = Itinerary.query.get_or_404(itinerary_id)
+        return jsonify({
+            "success": True,
+            "itinerary": itinerary.to_dict()
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/itineraries/<int:itinerary_id>", methods=["PUT"])
+def update_itinerary(itinerary_id):
+    """Update an itinerary"""
+    try:
+        itinerary = Itinerary.query.get_or_404(itinerary_id)
+        data = request.get_json() or {}
+        
+        # Update fields if provided
+        if "title" in data:
+            itinerary.title = data["title"].strip()
+        
+        if "description" in data:
+            itinerary.description = data["description"].strip()
+        
+        if "destination" in data:
+            itinerary.destination = data["destination"].strip()
+        
+        if "start_date" in data:
+            if data["start_date"]:
+                try:
+                    itinerary.start_date = datetime.strptime(data["start_date"], "%Y-%m-%d").date()
+                except ValueError:
+                    return jsonify({"success": False, "error": "Invalid start_date format. Use YYYY-MM-DD"}), 400
+            else:
+                itinerary.start_date = None
+        
+        if "end_date" in data:
+            if data["end_date"]:
+                try:
+                    itinerary.end_date = datetime.strptime(data["end_date"], "%Y-%m-%d").date()
+                except ValueError:
+                    return jsonify({"success": False, "error": "Invalid end_date format. Use YYYY-MM-DD"}), 400
+            else:
+                itinerary.end_date = None
+        
+        if "budget" in data:
+            itinerary.budget = data["budget"]
+        
+        if "status" in data:
+            itinerary.status = data["status"]
+        
+        # Validate date range
+        if itinerary.start_date and itinerary.end_date and itinerary.start_date > itinerary.end_date:
+            return jsonify({"success": False, "error": "start_date cannot be after end_date"}), 400
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Itinerary updated successfully",
+            "itinerary": itinerary.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/itineraries/<int:itinerary_id>", methods=["DELETE"])
+def delete_itinerary(itinerary_id):
+    """Delete an itinerary and all its items"""
+    try:
+        itinerary = Itinerary.query.get_or_404(itinerary_id)
+        db.session.delete(itinerary)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Itinerary deleted successfully"
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/itineraries/<int:itinerary_id>/items", methods=["POST"])
+@limiter.limit("20/minute")
+def add_itinerary_item(itinerary_id):
+    """Add an item to an itinerary"""
+    try:
+        itinerary = Itinerary.query.get_or_404(itinerary_id)
+        data = request.get_json() or {}
+        
+        item_type = data.get("item_type", "").strip()
+        title = data.get("title", "").strip()
+        description = data.get("description", "").strip()
+        date = data.get("date")
+        time = data.get("time")
+        location = data.get("location", "").strip()
+        price = data.get("price")
+        url = data.get("url", "").strip()
+        image_url = data.get("image_url", "").strip()
+        order_index = data.get("order_index", 0)
+        
+        if not item_type:
+            return jsonify({"success": False, "error": "item_type is required"}), 400
+        
+        if not title:
+            return jsonify({"success": False, "error": "title is required"}), 400
+        
+        # Parse date and time
+        parsed_date = None
+        parsed_time = None
+        
+        if date:
+            try:
+                parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
+            except ValueError:
+                return jsonify({"success": False, "error": "Invalid date format. Use YYYY-MM-DD"}), 400
+        
+        if time:
+            try:
+                parsed_time = datetime.strptime(time, "%H:%M").time()
+            except ValueError:
+                return jsonify({"success": False, "error": "Invalid time format. Use HH:MM"}), 400
+        
+        item = ItineraryItem(
+            itinerary_id=itinerary_id,
+            item_type=item_type,
+            title=title,
+            description=description,
+            date=parsed_date,
+            time=parsed_time,
+            location=location,
+            price=price,
+            url=url,
+            image_url=image_url,
+            order_index=order_index
+        )
+        
+        db.session.add(item)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Item added to itinerary successfully",
+            "item": item.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/itineraries/<int:itinerary_id>/items/<int:item_id>", methods=["PUT"])
+def update_itinerary_item(itinerary_id, item_id):
+    """Update an itinerary item"""
+    try:
+        item = ItineraryItem.query.filter_by(id=item_id, itinerary_id=itinerary_id).first_or_404()
+        data = request.get_json() or {}
+        
+        # Update fields if provided
+        if "title" in data:
+            item.title = data["title"].strip()
+        
+        if "description" in data:
+            item.description = data["description"].strip()
+        
+        if "date" in data:
+            if data["date"]:
+                try:
+                    item.date = datetime.strptime(data["date"], "%Y-%m-%d").date()
+                except ValueError:
+                    return jsonify({"success": False, "error": "Invalid date format. Use YYYY-MM-DD"}), 400
+            else:
+                item.date = None
+        
+        if "time" in data:
+            if data["time"]:
+                try:
+                    item.time = datetime.strptime(data["time"], "%H:%M").time()
+                except ValueError:
+                    return jsonify({"success": False, "error": "Invalid time format. Use HH:MM"}), 400
+            else:
+                item.time = None
+        
+        if "location" in data:
+            item.location = data["location"].strip()
+        
+        if "price" in data:
+            item.price = data["price"]
+        
+        if "url" in data:
+            item.url = data["url"].strip()
+        
+        if "image_url" in data:
+            item.image_url = data["image_url"].strip()
+        
+        if "status" in data:
+            item.status = data["status"]
+        
+        if "order_index" in data:
+            item.order_index = data["order_index"]
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Item updated successfully",
+            "item": item.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/itineraries/<int:itinerary_id>/items/<int:item_id>", methods=["DELETE"])
+def delete_itinerary_item(itinerary_id, item_id):
+    """Delete an itinerary item"""
+    try:
+        item = ItineraryItem.query.filter_by(id=item_id, itinerary_id=itinerary_id).first_or_404()
+        db.session.delete(item)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Item deleted successfully"
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/itineraries/<int:itinerary_id>/items/reorder", methods=["POST"])
+def reorder_itinerary_items(itinerary_id):
+    """Reorder items in an itinerary"""
+    try:
+        itinerary = Itinerary.query.get_or_404(itinerary_id)
+        data = request.get_json() or {}
+        
+        item_orders = data.get("item_orders", [])  # List of {id: item_id, order_index: new_index}
+        
+        for item_order in item_orders:
+            item_id = item_order.get("id")
+            order_index = item_order.get("order_index")
+            
+            if item_id and order_index is not None:
+                item = ItineraryItem.query.filter_by(id=item_id, itinerary_id=itinerary_id).first()
+                if item:
+                    item.order_index = order_index
+        
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Items reordered successfully"
+        })
+        
+    except Exception as e:
+        db.session.rollback()
         return jsonify({"success": False, "error": str(e)}), 500
