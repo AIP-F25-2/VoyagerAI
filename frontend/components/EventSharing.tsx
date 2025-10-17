@@ -21,7 +21,7 @@ export default function EventSharing({ event, userEmail }: EventSharingProps) {
     setIsSharing(true);
     
     try {
-      const response = await fetch("http://localhost:5000/api/events/share", {
+      const response = await fetch("/api/events/share", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

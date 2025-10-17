@@ -32,7 +32,7 @@ export default function AdvancedFilters({ onFiltersChange, onSearch }: AdvancedF
 
   useEffect(() => {
     // Fetch filter options from backend
-    fetch("http://localhost:5000/api/events/filters")
+    fetch("/api/events/filters")
       .then(res => res.json())
       .then(data => {
         if (data.success) {

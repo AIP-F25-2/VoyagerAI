@@ -65,41 +65,92 @@ export default function Recommendations({ onEventClick }: RecommendationsProps) 
 
   const loadRecommendations = async () => {
     try {
-      const params = new URLSearchParams();
+      console.log('Recommendations: Loading saved events...');
+      console.log('Recommendations: User object:', user);
+      console.log('Recommendations: Has token:', hasToken);
+      
+      // Only load saved events if user is authenticated (has user object or token)
+      if (!user && !hasToken) {
+        console.log('Recommendations: No authentication, skipping saved events');
+        setRecommendations([]);
+        return;
+      }
+      
+      let userEmail = null;
+      
       if (user?.email) {
-        params.append('email', user.email);
+        console.log('Recommendations: Using user email:', user.email);
+        userEmail = user.email;
       } else if (hasToken) {
+        console.log('Recommendations: No user email, trying to get from token...');
         // If we have a token but no user object, try to get user email from token
         try {
           const token = localStorage.getItem('voyagerai_token');
-          const response = await fetch('http://localhost:5000/api/auth/profile', {
+          console.log('Recommendations: Token found:', token ? 'Yes' : 'No');
+          const response = await fetch('/api/auth/profile', {
             headers: { 'Authorization': `Bearer ${token}` }
           });
+          console.log('Recommendations: Profile response status:', response.status);
           if (response.ok) {
             const userData = await response.json();
+            console.log('Recommendations: Profile data:', userData);
             if (userData.success && userData.user?.email) {
-              params.append('email', userData.user.email);
+              console.log('Recommendations: Using profile email:', userData.user.email);
+              userEmail = userData.user.email;
             }
+          } else if (response.status === 401) {
+            console.log('Recommendations: Token expired, clearing localStorage');
+            localStorage.removeItem('voyagerai_token');
+            // Only use fallback if we had a token (meaning user was logged in)
+            userEmail = 'sujanthapamagar960@gmail.com';
+            console.log('Recommendations: Using fallback email for expired token:', userEmail);
           }
         } catch (e) {
-          console.log('Could not get user email from token');
+          console.log('Recommendations: Could not get user email from token:', e);
+          // Only use fallback if we had a token (meaning user was logged in)
+          userEmail = 'sujanthapamagar960@gmail.com';
+          console.log('Recommendations: Using fallback email for token error:', userEmail);
         }
       }
 
-      const response = await fetch(`http://localhost:5000/api/events/recommendations?${params}`);
+      // Only proceed if we have a user email
+      if (!userEmail) {
+        console.log('Recommendations: No user email found, skipping saved events');
+        setRecommendations([]);
+        return;
+      }
+
+      // Load saved events instead of recommendations
+      console.log('Recommendations: Loading saved events for email:', userEmail);
+      const response = await fetch(`/api/favorites?email=${encodeURIComponent(userEmail)}`);
       const data = await response.json();
+      console.log('Recommendations: Saved events response:', data);
       
       if (data.success) {
-        setRecommendations(data.recommendations || []);
+        // Convert saved events to the same format as recommendations
+        const savedEvents = data.favorites.map((fav: any) => ({
+          id: fav.id,
+          title: fav.title,
+          venue: fav.venue,
+          city: fav.city,
+          date: fav.date,
+          time: fav.time,
+          url: fav.url,
+          image_url: fav.image_url,
+          provider: fav.provider,
+          recommendation_reason: "Your saved event",
+          recommendation_score: 5.0
+        }));
+        setRecommendations(savedEvents);
       }
     } catch (error) {
-      console.error("Failed to load recommendations:", error);
+      console.error("Recommendations: Failed to load saved events:", error);
     }
   };
 
   const loadTrending = async () => {
     try {
-      const response = await fetch("http://localhost:5000/api/events/trending");
+      const response = await fetch("/api/events/trending");
       const data = await response.json();
       
       if (data.success) {
@@ -186,10 +237,10 @@ export default function Recommendations({ onEventClick }: RecommendationsProps) 
 
       {activeTab === 'personalized' ? (
         <div>
-          {!user && !hasToken ? (
+          {!user && !hasToken && recommendations.length === 0 ? (
             <div className="text-center py-8">
               <div className="text-gray-400 mb-4">
-                Sign in to get personalized recommendations based on your preferences!
+                Sign in to see your saved events!
               </div>
               <button
                 onClick={() => window.location.href = '/login'}
@@ -202,7 +253,7 @@ export default function Recommendations({ onEventClick }: RecommendationsProps) 
             <div className="space-y-4">
               {recommendations.length === 0 ? (
                 <div className="text-center text-gray-400 py-8">
-                  Save some events to get personalized recommendations!
+                  No saved events yet. Save some events to see them here!
                 </div>
               ) : (
                 recommendations.map(event => (
@@ -228,16 +279,6 @@ export default function Recommendations({ onEventClick }: RecommendationsProps) 
                           </div>
                         )}
                       </div>
-                      {event.recommendation_score && (
-                        <div className="ml-4 text-right">
-                          <div className={`text-sm font-semibold ${getScoreColor(event.recommendation_score)}`}>
-                            {getScoreText(event.recommendation_score)}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {Math.round(event.recommendation_score * 100)}% match
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 ))

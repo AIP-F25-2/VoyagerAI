@@ -59,7 +59,7 @@ export default function SubscriptionStatus() {
 
   const loadPlans = async () => {
     try {
-      const response = await fetch("http://localhost:5000/api/subscription/plans");
+      const response = await fetch("/api/subscription/plans");
       const data = await response.json();
       
       if (data.success) {
@@ -72,7 +72,7 @@ export default function SubscriptionStatus() {
 
   const loadSubscriptionStatus = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/subscription/status?email=${user?.email}`);
+      const response = await fetch(`/api/subscription/status?email=${user?.email}`);
       const data = await response.json();
       
       if (data.success) {
@@ -91,7 +91,7 @@ export default function SubscriptionStatus() {
     setIsUpgrading(true);
     
     try {
-      const response = await fetch("http://localhost:5000/api/subscription/upgrade", {
+      const response = await fetch("/api/subscription/upgrade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

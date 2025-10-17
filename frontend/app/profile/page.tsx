@@ -45,7 +45,7 @@ export default function ProfilePage() {
 
   const deleteFavorite = async (id: number) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/favorites/${id}`, {
+      const response = await fetch(`/api/favorites/${id}`, {
         method: "DELETE",
       });
       if (response.ok) {

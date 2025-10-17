@@ -36,7 +36,7 @@ export default function EventReviews({ eventTitle, eventDate, userEmail }: Event
         ...(eventDate && { event_date: eventDate })
       });
 
-      const response = await fetch(`http://localhost:5000/api/events/reviews?${params}`);
+      const response = await fetch(`/api/events/reviews?${params}`);
       const data = await response.json();
       
       if (data.success) {
@@ -64,7 +64,7 @@ export default function EventReviews({ eventTitle, eventDate, userEmail }: Event
     setIsSubmitting(true);
     
     try {
-      const response = await fetch("http://localhost:5000/api/events/reviews", {
+      const response = await fetch("/api/events/reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
