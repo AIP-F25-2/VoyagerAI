@@ -112,7 +112,7 @@ def get_events():
     try:
         city = request.args.get("city", "").strip()
         query_param = request.args.get("q", "").strip()
-        limit = int(request.args.get("limit", 50))
+        limit = int(request.args.get("limit", 1000))  # Increased from 50 to 1000
         # Enhanced filters
         provider = request.args.get("provider", "").strip().lower()  # ticketmaster|eventbrite|csv|all
         date_from = request.args.get("date_from", "").strip()
@@ -124,7 +124,7 @@ def get_events():
         venue = request.args.get("venue", "").strip()
         accessibility = request.args.get("accessibility", "").strip().lower()  # wheelchair|hearing|visual
         page = max(1, int(request.args.get("page", 1)))
-        page_size = max(1, min(100, int(request.args.get("page_size", limit))))
+        page_size = max(1, min(1000, int(request.args.get("page_size", limit))))  # Increased from 100 to 1000
 
         # Interpret shortcuts
         if when == "tonight":
@@ -374,9 +374,9 @@ def scrape_all_sources():
     try:
         data = request.get_json() or {}
         city = data.get("city", "Mumbai")
-        bms_limit = data.get("bms_limit", 10)
-        eventbrite_limit = data.get("eventbrite_limit", 50)
-        europaticket_limit = data.get("europaticket_limit", 50)
+        bms_limit = data.get("bms_limit", 100)  # Increased from 10 to 100
+        eventbrite_limit = data.get("eventbrite_limit", 200)  # Increased from 50 to 200
+        europaticket_limit = data.get("europaticket_limit", 200)  # Increased from 50 to 200
 
         # Scrape from all sources
         all_events = scrape_all_events(
@@ -1244,7 +1244,7 @@ def get_itineraries():
     try:
         user_id = request.args.get("user_id", type=int)
         status = request.args.get("status", "").strip()
-        limit = int(request.args.get("limit", 50))
+        limit = int(request.args.get("limit", 1000))  # Increased from 50 to 1000
         
         if not user_id:
             return jsonify({"success": False, "error": "user_id is required"}), 400

@@ -1,9 +1,9 @@
 import os
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union, Optional
 
 
-def search_hotels(city: str, check_in: str | None = None, check_out: str | None = None, guests: int | None = None, limit: int = 10) -> List[Dict[str, Any]]:
+def search_hotels(city: str, check_in: Optional[str] = None, check_out: Optional[str] = None, guests: Optional[int] = None, limit: int = 10) -> List[Dict[str, Any]]:
     """Stub provider for hotels search.
 
     If HOTEL_API_KEY is set, this function can be extended to call a real provider.

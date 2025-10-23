@@ -12,7 +12,7 @@ class Config:
     
     # Scraping configuration
     SCRAPING_TIMEOUT = int(os.getenv('SCRAPING_TIMEOUT', 60))
-    MAX_EVENTS_PER_CITY = int(os.getenv('MAX_EVENTS_PER_CITY', 100))
+    MAX_EVENTS_PER_CITY = int(os.getenv('MAX_EVENTS_PER_CITY', 1000))  # Increased from 100 to 1000
 
 class DevelopmentConfig(Config):
     """Development configuration"""

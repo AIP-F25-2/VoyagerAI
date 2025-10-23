@@ -50,7 +50,7 @@ class User(db.Model):
 
     def set_password(self, password):
         """Hash and set the user's password"""
-        self.password_hash = generate_password_hash(password)
+        self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
 
     def check_password(self, password):
         """Check if the provided password matches the hash"""
@@ -107,13 +107,14 @@ class User(db.Model):
         return token
 
     @staticmethod
-    def verify_token(token, token_type='email_verification'):
+    def verify_token(token, token_type=None):
         """Verify JWT token and return user"""
         try:
             secret_key = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
             payload = jwt.decode(token, secret_key, algorithms=['HS256'])
             
-            if payload.get('type') != token_type:
+            # If token_type is specified, check it matches
+            if token_type and payload.get('type') != token_type:
                 return None
                 
             user_id = payload['user_id']
@@ -436,16 +437,16 @@ class Subscription(db.Model):
         """Get plan limits based on subscription type"""
         limits = {
             'free': {
-                'max_favorites': 10,
-                'max_reviews': 5,
+                'max_favorites': 1000,  # Increased from 10 to 1000
+                'max_reviews': 100,     # Increased from 5 to 100
                 'ad_free': False,
                 'priority_support': False,
                 'early_access': False,
                 'advanced_filters': False
             },
             'premium': {
-                'max_favorites': 100,
-                'max_reviews': 50,
+                'max_favorites': 5000,  # Increased from 100 to 5000
+                'max_reviews': 500,    # Increased from 50 to 500
                 'ad_free': True,
                 'priority_support': True,
                 'early_access': True,
