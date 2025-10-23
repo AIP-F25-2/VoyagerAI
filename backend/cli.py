@@ -66,7 +66,7 @@ def scrape_cmd(city: str, limit: int):
 
 @cli.command("runserver")
 @click.option("--host", default="0.0.0.0")
-@click.option("--port", default=5000, type=int)
+@click.option("--port", default=5001, type=int)
 def runserver(host: str, port: int):
     """Run the Flask development server."""
     app.run(debug=True, host=host, port=port)

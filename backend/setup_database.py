@@ -145,8 +145,8 @@ def main():
     print("Next steps:")
     print("1. Update your .env file with correct PostgreSQL credentials")
     print("2. Start the Flask server: python wsgi.py")
-    print("3. Test the API: GET http://localhost:5000/api/events")
-    print("4. Scrape events: POST http://localhost:5000/api/scrape")
+    print("3. Test the API: GET http://localhost:5001/api/events")
+    print("4. Scrape events: POST http://localhost:5001/api/scrape")
     
     return True
 
