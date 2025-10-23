@@ -49,7 +49,7 @@ npm run dev
 ## Where to find it
 
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
+- Backend API: http://localhost:5001
 
 ## What it does
 
@@ -140,7 +140,7 @@ VoyagerAI/
 2. **Port already in use**
    ```bash
    lsof -ti:3000 | xargs kill -9
-   lsof -ti:5000 | xargs kill -9
+   lsof -ti:5001 | xargs kill -9
    ```
 
 3. **Database issues**
