@@ -51,9 +51,14 @@ export default function SubscriptionStatus() {
   }, []);
 
   useEffect(() => {
+    console.log("SubscriptionStatus useEffect - user:", user);
     if (user?.email) {
+      console.log("User email available, loading subscription data");
       loadPlans();
       loadSubscriptionStatus();
+    } else {
+      console.log("No user email available");
+      setIsLoading(false);
     }
   }, [user]);
 
@@ -72,11 +77,15 @@ export default function SubscriptionStatus() {
 
   const loadSubscriptionStatus = async () => {
     try {
+      console.log("Loading subscription status for:", user?.email);
       const response = await fetch(`/api/subscription/status?email=${user?.email}`);
       const data = await response.json();
+      console.log("Subscription data received:", data);
       
       if (data.success) {
         setSubscription(data.subscription);
+      } else {
+        console.error("Subscription API returned error:", data);
       }
     } catch (error) {
       console.error("Failed to load subscription status:", error);
