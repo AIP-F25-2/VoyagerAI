@@ -4,7 +4,7 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const query = url.searchParams.get("q") || "Toronto";
   const city = url.searchParams.get("city") || "";
-  const limit = url.searchParams.get("limit") || "50";
+  const limit = url.searchParams.get("limit") || "1000";  // Increased from 50 to 1000
 
   // Proxy the request to Flask
   const params = new URLSearchParams({ q: query });

@@ -110,7 +110,7 @@ import { useEffect, useState } from "react";
 import SearchBar from "@/components/ui/SearchBar";
 import EventsSection from "@/components/ui/EventsSection";
 import AdvancedFilters from "@/components/AdvancedFilters";
-import Recommendations from "@/components/Recommendations";
+// Removed Recommendations component
 import FlightsPlanner from "@/components/FlightsPlanner";
 import { MusicalNoteIcon, TrophyIcon, TicketIcon, SparklesIcon } from "@heroicons/react/24/solid";
 
@@ -123,7 +123,7 @@ export default function HomePage() {
   const [query, setQuery] = useState("");
   const [city, setCity] = useState("");
   const [filters, setFilters] = useState<any>({});
-  const [showRecommendations, setShowRecommendations] = useState(true);
+  // Removed showRecommendations state
 
   // Get user's location using Geolocation + reverse geocoding
   const fetchUserCity = async () => {
@@ -266,17 +266,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Recommendations */}
-      {showRecommendations && (
-        <div className="mx-auto max-w-6xl px-4 mb-8">
-          <Recommendations
-            onEventClick={(event) => {
-              // Handle event click - could open details or add to favorites
-              console.log("Recommended event clicked:", event);
-            }}
-          />
-        </div>
-      )}
+      {/* Recommendations section removed */}
 
       {/* Results */}
       <div className="mx-auto max-w-6xl px-4 py-10">

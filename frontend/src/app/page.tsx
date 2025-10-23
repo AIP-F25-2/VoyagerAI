@@ -12,7 +12,7 @@ export default function Home() {
   const [events, setEvents] = useState<EventItem[]>([])
   const [loading, setLoading] = useState(true)
   const [city, setCity] = useState('Mumbai')
-  const [limit, setLimit] = useState(10)
+  const [limit, setLimit] = useState(100)  // Increased from 10 to 100
   const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   const load = async () => {

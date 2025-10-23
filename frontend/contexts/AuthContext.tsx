@@ -19,13 +19,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isClient, setIsClient] = useState(false);
 
   // Check for existing token on mount
   useEffect(() => {
     // Only run on client side
     if (typeof window === 'undefined') return;
     
-    const storedToken = localStorage.getItem('travelplanner_token');
+    setIsClient(true);
+    const storedToken = localStorage.getItem('voyagerai_token');
     console.log('AuthContext: Checking stored token:', storedToken ? 'Found' : 'Not found');
     
     if (storedToken) {
@@ -48,11 +50,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         console.log('AuthContext: Token invalid, removing from localStorage');
         // Token is invalid, remove it
-        localStorage.removeItem('travelplanner_token');
+        localStorage.removeItem('voyagerai_token');
+        setToken(null);
+        setUser(null);
       }
     } catch (error) {
       console.error('AuthContext: Token verification failed:', error);
       localStorage.removeItem('voyagerai_token');
+      setToken(null);
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
@@ -64,11 +70,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await login(email, password);
       console.log('AuthContext: Login response:', response);
       
-      if (response.success && response.token && response.user) {
+      if (response.token && response.user) {
         console.log('AuthContext: Login successful, storing token and user');
         setToken(response.token);
         setUser(response.user);
-        localStorage.setItem('travelplanner_token', response.token);
+        localStorage.setItem('voyagerai_token', response.token);
         return { success: true };
       } else {
         console.log('AuthContext: Login failed:', response.message);
@@ -83,10 +89,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const handleSignup = async (name: string, email: string, password: string) => {
     try {
       const response = await signup(name, email, password);
-      if (response.success && response.token && response.user) {
+      if (response.token && response.user) {
         setToken(response.token);
         setUser(response.user);
-        localStorage.setItem('travelplanner_token', response.token);
+        localStorage.setItem('voyagerai_token', response.token);
         return { success: true };
       } else {
         return { success: false, message: response.message || 'Signup failed' };
@@ -97,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    console.log('AuthContext: Logging out user');
     setUser(null);
     setToken(null);
     localStorage.removeItem('voyagerai_token');
@@ -109,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login: handleLogin,
     signup: handleSignup,
     logout,
-    isAuthenticated: !!user && !!token,
+    isAuthenticated: isClient && !!user && !!token,
   };
 
   return (

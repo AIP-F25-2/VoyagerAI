@@ -43,8 +43,10 @@ export default function ItineraryDetailPage() {
   const itineraryId = params.id as string
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
+  const [savedEvents, setSavedEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddItemForm, setShowAddItemForm] = useState(false)
+  const [showSavedEvents, setShowSavedEvents] = useState(false)
   const [newItem, setNewItem] = useState({
     item_type: 'activity',
     title: '',
@@ -58,33 +60,99 @@ export default function ItineraryDetailPage() {
   })
 
   useEffect(() => {
-    if (isAuthenticated && user?.id && itineraryId) {
-      fetchItinerary()
-    }
+    // Add a small delay to ensure authentication context is loaded
+    const timer = setTimeout(() => {
+      if (isAuthenticated && user?.id && itineraryId) {
+        console.log('User authenticated, fetching itinerary for user:', user.id)
+        fetchItinerary()
+        fetchSavedEvents()
+      } else {
+        console.log('User not authenticated or no user ID or itinerary ID')
+        setLoading(false)
+      }
+    }, 100)
+
+    return () => clearTimeout(timer)
   }, [isAuthenticated, user, itineraryId])
 
   const fetchItinerary = async () => {
     try {
-      const response = await fetch(`/api/travel-plans/${itineraryId}`)
+      console.log('Fetching itinerary with ID:', itineraryId)
+      const response = await fetch(`http://127.0.0.1:5000/api/itineraries/${itineraryId}`)
+      console.log('Response status:', response.status)
       const data = await response.json()
+      console.log('Response data:', data)
+      
       if (data.success) {
         setItinerary(data.itinerary)
       } else {
+        console.error('Itinerary not found:', data.error)
         alert('Itinerary not found')
         router.push('/travel-plans')
       }
     } catch (error) {
       console.error('Failed to fetch travel plan:', error)
-      alert('Failed to load travel plan')
+      alert('Failed to load travel plan: ' + error.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchSavedEvents = async () => {
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/api/favorites?user_email=${user?.email}`)
+      const data = await response.json()
+      if (data.success) {
+        setSavedEvents(data.favorites)
+      }
+    } catch (error) {
+      console.error('Failed to fetch saved events:', error)
+    }
+  }
+
+  const addSavedEventToItinerary = async (event: any) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/api/itineraries/${itineraryId}/items`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          item_type: 'event',
+          title: event.title,
+          description: event.venue || '',
+          date: event.date || '',
+          time: '',
+          location: event.venue || '',
+          price: event.price ? parseFloat(event.price.replace(/[^0-9.]/g, '')) : 0,
+          url: event.url || '',
+          image_url: '',
+          status: 'planned',
+          order_index: itinerary?.items?.length || 0
+        }),
+      })
+
+      const data = await response.json()
+      if (data.success) {
+        setItinerary(prev => prev ? {
+          ...prev,
+          items: [...(prev.items || []), data.item]
+        } : null)
+        alert('Event added to itinerary successfully!')
+        setShowSavedEvents(false)
+      } else {
+        alert('Failed to add event to itinerary')
+      }
+    } catch (error) {
+      console.error('Failed to add event to itinerary:', error)
+      alert('Failed to add event to itinerary')
     }
   }
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const response = await fetch(`/api/travel-plans/${itineraryId}/items`, {
+      const response = await fetch(`http://127.0.0.1:5000/api/itineraries/${itineraryId}/items`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -127,7 +195,7 @@ export default function ItineraryDetailPage() {
     if (!confirm('Are you sure you want to delete this item?')) return
 
     try {
-      const response = await fetch(`/api/travel-plans/${itineraryId}/items/${itemId}`, {
+      const response = await fetch(`http://127.0.0.1:5000/api/itineraries/${itineraryId}/items/${itemId}`, {
         method: 'DELETE',
       })
 
@@ -188,6 +256,18 @@ export default function ItineraryDetailPage() {
     }
     return a.order_index - b.order_index
   }) || []
+
+  // Show loading state while authentication is being checked
+  if (loading && !itinerary) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-black text-white p-8">
+        <div className="max-w-4xl mx-auto text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-xl">Loading travel plan...</p>
+        </div>
+      </div>
+    )
+  }
 
   if (!isAuthenticated) {
     return (
@@ -282,15 +362,23 @@ export default function ItineraryDetailPage() {
           )}
         </div>
 
-        {/* Add Item Button */}
+        {/* Add Item Buttons */}
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold">Itinerary Items</h2>
-          <button
-            onClick={() => setShowAddItemForm(true)}
-            className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg"
-          >
-            + Add Item
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowSavedEvents(true)}
+              className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg"
+            >
+              📅 Add from Saved Events ({savedEvents.length})
+            </button>
+            <button
+              onClick={() => setShowAddItemForm(true)}
+              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg"
+            >
+              + Add Custom Item
+            </button>
+          </div>
         </div>
 
         {/* Add Item Form */}
@@ -387,6 +475,52 @@ export default function ItineraryDetailPage() {
                 </button>
               </div>
             </form>
+          </div>
+        )}
+
+        {/* Saved Events Selection */}
+        {showSavedEvents && (
+          <div className="bg-gray-800/50 p-6 rounded-lg mb-8">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold">Select from Your Saved Events</h3>
+              <button
+                onClick={() => setShowSavedEvents(false)}
+                className="text-gray-400 hover:text-gray-300"
+              >
+                ✕ Close
+              </button>
+            </div>
+            
+            {savedEvents.length === 0 ? (
+              <p className="text-gray-400 text-center py-4">No saved events yet. Go to the main page and save some events!</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {savedEvents.map((event, index) => (
+                  <div key={index} className="bg-gray-700/50 p-4 rounded-lg hover:bg-gray-600/50 transition-colors">
+                    <h4 className="font-semibold mb-2">{event.title}</h4>
+                    {event.venue && <p className="text-sm text-gray-300 mb-2">📍 {event.venue}</p>}
+                    {event.date && <p className="text-sm text-gray-300 mb-2">📅 {event.date}</p>}
+                    {event.price && <p className="text-sm text-green-400 mb-3">💰 {event.price}</p>}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => addSavedEventToItinerary(event)}
+                        className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm flex-1"
+                      >
+                        Add to Itinerary
+                      </button>
+                      <a
+                        href={event.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm"
+                      >
+                        View
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

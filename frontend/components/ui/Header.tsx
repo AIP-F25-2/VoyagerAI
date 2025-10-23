@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function Header() {
-  const { user, isAuthenticated, logout } = useAuth()
+  const { user, isAuthenticated, logout, isLoading } = useAuth()
 
   return (
     <header className="sticky top-0 z-50 flex items-center justify-between px-4 py-3 border-b border-white/10 glass-dark">
@@ -13,7 +13,9 @@ export default function Header() {
       </Link>
 
       <div className="flex items-center space-x-2">
-        {isAuthenticated ? (
+        {isLoading ? (
+          <div className="px-4 py-1.5 text-gray-400">Loading...</div>
+        ) : isAuthenticated ? (
           <>
             <Link 
               href="/travel-plans"

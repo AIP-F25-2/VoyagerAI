@@ -143,7 +143,7 @@ export default function EventCard({ event, provider }: EventCardProps) {
                 image_url: imageUrlForSave || null,
                 provider: providerLabel,
               };
-              const resp = await fetch("/api/favorites", {
+              const resp = await fetch("http://127.0.0.1:5000/api/favorites", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(body),
