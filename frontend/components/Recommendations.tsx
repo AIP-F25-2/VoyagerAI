@@ -36,7 +36,7 @@ function RecommendationsContent({ onEventClick }: RecommendationsProps) {
       try {
         const token = localStorage.getItem('voyagerai_token');
         if (token) {
-          const response = await fetch('http://127.0.0.1:5000/api/auth/verify-token', {
+          const response = await fetch('http://127.0.0.1:5001/api/auth/verify-token', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token })
@@ -107,7 +107,7 @@ function RecommendationsContent({ onEventClick }: RecommendationsProps) {
           console.log('Recommendations: Token found:', token ? 'Yes' : 'No');
           
           if (token) {
-            const response = await fetch('http://127.0.0.1:5000/api/auth/profile', {
+            const response = await fetch('http://127.0.0.1:5001/api/auth/profile', {
               headers: { 'Authorization': `Bearer ${token}` }
             });
             console.log('Recommendations: Profile response status:', response.status);
@@ -169,7 +169,7 @@ function RecommendationsContent({ onEventClick }: RecommendationsProps) {
   const loadTrending = async () => {
     try {
       console.log('Recommendations: Loading trending events...');
-      const response = await fetch('http://127.0.0.1:5000/api/events/trending');
+      const response = await fetch('http://127.0.0.1:5001/api/events/trending');
       const data = await response.json();
       
       if (data.success && data.trending) {

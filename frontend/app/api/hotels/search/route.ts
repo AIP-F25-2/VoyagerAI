@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   if (guests) params.set("guests", guests);
   if (limit) params.set("limit", limit);
 
-  const res = await fetch(`http://127.0.0.1:5000/api/hotels/search?${params.toString()}`);
+  const res = await fetch(`http://127.0.0.1:5001/api/hotels/search?${params.toString()}`);
   const data = await res.json();
   return NextResponse.json(data);
 }

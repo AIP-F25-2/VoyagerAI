@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   const params = new URLSearchParams({ q: query });
   if (city) params.set("city", city);
   if (limit) params.set("limit", limit);
-  const res = await fetch(`http://127.0.0.1:5000/api/events?${params.toString()}`);
+  const res = await fetch(`http://127.0.0.1:5001/api/events?${params.toString()}`);
   const data = await res.json();
 
   return NextResponse.json(data);

@@ -117,7 +117,7 @@ export default function ProfilePage() {
               href="/"
               className="bg-green-600 hover:bg-green-700 p-4 rounded-lg text-center transition-colors"
             >
-              <div className="text-2xl mb-2">🎵</div>
+              <div className="text-2xl mb-2">🔍</div>
               <h3 className="font-semibold">Discover Events</h3>
               <p className="text-sm text-gray-300">Find new events to attend</p>
             </a>

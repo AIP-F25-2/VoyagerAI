@@ -17,7 +17,7 @@ export async function GET(req: Request) {
   if (adults) params.set("adults", adults);
   if (limit) params.set("limit", limit);
 
-  const res = await fetch(`http://127.0.0.1:5000/api/flights/search?${params.toString()}`);
+  const res = await fetch(`http://127.0.0.1:5001/api/flights/search?${params.toString()}`);
   const data = await res.json();
   return NextResponse.json(data);
 }

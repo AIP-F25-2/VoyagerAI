@@ -78,7 +78,7 @@ export default function ItineraryDetailPage() {
   const fetchItinerary = async () => {
     try {
       console.log('Fetching itinerary with ID:', itineraryId)
-      const response = await fetch(`http://127.0.0.1:5000/api/itineraries/${itineraryId}`)
+      const response = await fetch(`http://127.0.0.1:5001/api/itineraries/${itineraryId}`)
       console.log('Response status:', response.status)
       const data = await response.json()
       console.log('Response data:', data)
@@ -100,7 +100,7 @@ export default function ItineraryDetailPage() {
 
   const fetchSavedEvents = async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/favorites?user_email=${user?.email}`)
+      const response = await fetch(`http://127.0.0.1:5001/api/favorites?user_email=${user?.email}`)
       const data = await response.json()
       if (data.success) {
         setSavedEvents(data.favorites)
@@ -112,7 +112,7 @@ export default function ItineraryDetailPage() {
 
   const addSavedEventToItinerary = async (event: any) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/itineraries/${itineraryId}/items`, {
+      const response = await fetch(`http://127.0.0.1:5001/api/itineraries/${itineraryId}/items`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -152,7 +152,7 @@ export default function ItineraryDetailPage() {
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/itineraries/${itineraryId}/items`, {
+      const response = await fetch(`http://127.0.0.1:5001/api/itineraries/${itineraryId}/items`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -195,7 +195,7 @@ export default function ItineraryDetailPage() {
     if (!confirm('Are you sure you want to delete this item?')) return
 
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/itineraries/${itineraryId}/items/${itemId}`, {
+      const response = await fetch(`http://127.0.0.1:5001/api/itineraries/${itineraryId}/items/${itemId}`, {
         method: 'DELETE',
       })
 

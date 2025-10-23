@@ -74,7 +74,7 @@ export default function ItinerariesPage() {
   const fetchItineraries = async () => {
     try {
       console.log('Fetching itineraries for user ID:', user?.id)
-      const response = await fetch(`http://127.0.0.1:5000/api/itineraries?user_id=${user?.id}`)
+      const response = await fetch(`http://127.0.0.1:5001/api/itineraries?user_id=${user?.id}`)
       console.log('Fetch response status:', response.status)
       const data = await response.json()
       console.log('Fetch response data:', data)
@@ -93,7 +93,7 @@ export default function ItinerariesPage() {
 
   const fetchSavedEvents = async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/favorites?user_email=${user?.email}`)
+      const response = await fetch(`http://127.0.0.1:5001/api/favorites?user_email=${user?.email}`)
       const data = await response.json()
       if (data.success) {
         setSavedEvents(data.favorites)
@@ -105,7 +105,7 @@ export default function ItinerariesPage() {
 
   const addEventToTravelPlan = async (travelPlanId: number, event: any) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/itineraries/${travelPlanId}/items`, {
+      const response = await fetch(`http://127.0.0.1:5001/api/itineraries/${travelPlanId}/items`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -170,7 +170,7 @@ export default function ItinerariesPage() {
         budget: newItinerary.budget ? parseFloat(newItinerary.budget) : null
       })
       
-      const response = await fetch('http://127.0.0.1:5000/api/itineraries', {
+      const response = await fetch('http://127.0.0.1:5001/api/itineraries', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -223,7 +223,7 @@ export default function ItinerariesPage() {
     if (!confirm('Are you sure you want to delete this travel plan?')) return
 
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/itineraries/${id}`, {
+      const response = await fetch(`http://127.0.0.1:5001/api/itineraries/${id}`, {
         method: 'DELETE',
       })
 

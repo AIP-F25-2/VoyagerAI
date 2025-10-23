@@ -5,7 +5,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   const { id } = params;
-  const res = await fetch(`http://127.0.0.1:5000/api/favorites/${id}`, {
+  const res = await fetch(`http://127.0.0.1:5001/api/favorites/${id}`, {
     method: "DELETE",
   });
   const data = await res.json();
