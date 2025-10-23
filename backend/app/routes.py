@@ -1132,15 +1132,15 @@ def get_subscription_status():
             return jsonify({
                 "success": True,
                 "subscription": {
-                    "plan_type": "free",
+                    "plan": "free",
                     "status": "active",
                     "limits": {
-                        "max_favorites": 10,
-                        "max_reviews": 5,
-                        "ad_free": False,
-                        "priority_support": False,
-                        "early_access": False,
-                        "advanced_filters": False
+                        "saved_events": 10,
+                        "reviews": 5
+                    },
+                    "usage": {
+                        "saved_events": 0,  # This should be calculated from user's actual usage
+                        "reviews": 0
                     }
                 }
             })
@@ -1148,10 +1148,17 @@ def get_subscription_status():
         return jsonify({
             "success": True,
             "subscription": {
-                "plan_type": subscription.plan_type,
+                "plan": subscription.plan_type,
                 "status": subscription.status,
-                "end_date": subscription.end_date.isoformat() if subscription.end_date else None,
-                "limits": subscription.get_plan_limits()
+                "expires_at": subscription.end_date.isoformat() if subscription.end_date else None,
+                "limits": {
+                    "saved_events": subscription.get_plan_limits().get("max_favorites", 10),
+                    "reviews": subscription.get_plan_limits().get("max_reviews", 5)
+                },
+                "usage": {
+                    "saved_events": 0,  # This should be calculated from user's actual usage
+                    "reviews": 0
+                }
             }
         })
         
