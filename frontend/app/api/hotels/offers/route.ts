@@ -12,10 +12,7 @@ export async function GET(req: Request) {
     const currency = searchParams.get("currency") || process.env.NEXT_PUBLIC_DEFAULT_CURRENCY || "CAD";
 
     if (!hotelIds || !checkInDate || !checkOutDate) {
-      return NextResponse.json(
-        { error: "hotelIds, checkInDate, checkOutDate are required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "hotelIds, checkInDate, checkOutDate are required" }, { status: 400 });
     }
 
     const data = await amadeusGet("/v3/shopping/hotel-offers", {

@@ -5,12 +5,11 @@ import { amadeusGet } from "@/lib/amadeus";
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-
     const startLatitude = searchParams.get("startLatitude");
     const startLongitude = searchParams.get("startLongitude");
     const endLatitude = searchParams.get("endLatitude");
     const endLongitude = searchParams.get("endLongitude");
-    const departureDateTime = searchParams.get("departureDateTime"); // ISO, e.g. 2025-11-05T10:00:00
+    const departureDateTime = searchParams.get("departureDateTime"); // ISO
 
     if (!startLatitude || !startLongitude || !endLatitude || !endLongitude || !departureDateTime) {
       return NextResponse.json(
@@ -20,11 +19,7 @@ export async function GET(req: Request) {
     }
 
     const params: Record<string, string> = {
-      startLatitude,
-      startLongitude,
-      endLatitude,
-      endLongitude,
-      departureDateTime,
+      startLatitude, startLongitude, endLatitude, endLongitude, departureDateTime,
       passengers: searchParams.get("passengers") || "1",
       currencyCode: searchParams.get("currencyCode") || process.env.NEXT_PUBLIC_DEFAULT_CURRENCY || "CAD",
     };

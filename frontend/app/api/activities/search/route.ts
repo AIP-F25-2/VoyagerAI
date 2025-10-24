@@ -5,22 +5,17 @@ import { amadeusGet } from "@/lib/amadeus";
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-
-    // Required: latitude & longitude
     const latitude = searchParams.get("latitude");
     const longitude = searchParams.get("longitude");
+
     if (!latitude || !longitude) {
-      return NextResponse.json(
-        { error: "latitude and longitude are required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "latitude and longitude are required" }, { status: 400 });
     }
 
-    // Pass through optional params (radius, startDate, endDate, page[limit], category, etc.)
+    // Pass through any optional params (radius, startDate, endDate, page[limit], category…)
     const params: Record<string, string> = { latitude, longitude };
     for (const [k, v] of searchParams.entries()) {
-      if (k in params) continue;
-      params[k] = v;
+      if (!(k in params)) params[k] = v;
     }
 
     const data = await amadeusGet("/v1/shopping/activities", params);

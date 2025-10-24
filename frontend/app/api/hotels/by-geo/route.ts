@@ -7,16 +7,16 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const lat = searchParams.get("lat") || searchParams.get("latitude");
     const lon = searchParams.get("lon") || searchParams.get("longitude");
-    const radius = searchParams.get("radius") || "5"; // km
+    const radius = searchParams.get("radius") || "5"; // KM
 
     if (!lat || !lon) {
       return NextResponse.json({ error: "lat and lon are required" }, { status: 400 });
     }
 
     const data = await amadeusGet("/v1/reference-data/locations/hotels/by-geocode", {
-      latitude: lat,
-      longitude: lon,
-      radius,
+      latitude: String(lat),
+      longitude: String(lon),
+      radius: String(radius),
       radiusUnit: "KM",
     });
 
