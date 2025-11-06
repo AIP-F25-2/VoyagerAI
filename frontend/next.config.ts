@@ -15,6 +15,8 @@ const nextConfig = {
       { protocol: "https", hostname: "cdn.evbstatic.com" },
       { protocol: "https", hostname: "pixabay.com" },
       { protocol: "https", hostname: "cdn.pixabay.com" },
+      { protocol: "https", hostname: "images.unsplash.com" },
+      { protocol: "https", hostname: "images.universe.com" },
     ],
   },
 };

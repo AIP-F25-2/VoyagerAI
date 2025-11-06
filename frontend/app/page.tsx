@@ -112,17 +112,24 @@ import EventsSection from "@/components/ui/EventsSection";
 import AdvancedFilters from "@/components/AdvancedFilters";
 // Removed Recommendations component
 import FlightsPlanner from "@/components/FlightsPlanner";
+import HotelsPlanner from "@/components/HotelsPlanner";
+import AddToItinerary from "@/components/AddToItinerary";
+import AIChat from "@/components/AIChat";
+import Link from "next/link";
 import { MusicalNoteIcon, TrophyIcon, TicketIcon, SparklesIcon } from "@heroicons/react/24/solid";
 
 export default function HomePage() {
   const [ticketmasterEvents, setTicketmasterEvents] = useState<any[]>([]);
   const [eventbriteEvents, setEventbriteEvents] = useState<any[]>([]);
   const [csvEvents, setCsvEvents] = useState<any[]>([]);
+  const [hotels, setHotels] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [city, setCity] = useState("");
   const [filters, setFilters] = useState<any>({});
+  const [searchType, setSearchType] = useState<"events" | "hotels">("events");
+  const [showAIChat, setShowAIChat] = useState(false);
   // Removed showRecommendations state
 
   // Get user's location using Geolocation + reverse geocoding
@@ -147,32 +154,53 @@ export default function HomePage() {
     );
   };
 
-  const loadEvents = async (search: string, detectedCity = "", appliedFilters = {}) => {
+  const loadEvents = async (search: string, detectedCity = "", appliedFilters = {}, searchMode: "events" | "hotels" = "events") => {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams();
-      if (search) params.append("q", search);
-      if (detectedCity) params.append("city", detectedCity);
-      
-      // Add filter parameters
-      Object.entries(appliedFilters).forEach(([key, value]) => {
-        if (value && value !== "") {
-          params.append(key, value as string);
-        }
-      });
+      if (searchMode === "hotels") {
+        // Search hotels
+        const params = new URLSearchParams();
+        if (search) params.append("city", search);
+        else if (detectedCity) params.append("city", detectedCity);
+        params.append("limit", "20");
 
-      const res = await fetch(`/api/events?${params.toString()}`);
-      if (!res.ok) throw new Error("Backend unavailable or API error");
-      const data = await res.json();
-      setTicketmasterEvents(data.ticketmaster || []);
-      setEventbriteEvents(data.eventbrite || []);
-      setCsvEvents(data.csv_events || []);
+        const res = await fetch(`/api/hotels/search?${params.toString()}`);
+        if (!res.ok) throw new Error("Backend unavailable or API error");
+        const data = await res.json();
+        setHotels(data.hotels || []);
+        // Clear events when searching hotels
+        setTicketmasterEvents([]);
+        setEventbriteEvents([]);
+        setCsvEvents([]);
+      } else {
+        // Search events (existing logic)
+        const params = new URLSearchParams();
+        if (search) params.append("q", search);
+        if (detectedCity) params.append("city", detectedCity);
+        
+        // Add filter parameters
+        Object.entries(appliedFilters).forEach(([key, value]) => {
+          if (value && value !== "") {
+            params.append(key, value as string);
+          }
+        });
+
+        const res = await fetch(`/api/events?${params.toString()}`);
+        if (!res.ok) throw new Error("Backend unavailable or API error");
+        const data = await res.json();
+        setTicketmasterEvents(data.ticketmaster || []);
+        setEventbriteEvents(data.eventbrite || []);
+        setCsvEvents(data.csv_events || []);
+        // Clear hotels when searching events
+        setHotels([]);
+      }
     } catch (err: any) {
-      setError(err.message || "Failed to fetch events");
+      setError(err.message || "Failed to fetch data");
       setTicketmasterEvents([]);
       setEventbriteEvents([]);
       setCsvEvents([]);
+      setHotels([]);
     } finally {
       setLoading(false);
     }
@@ -184,20 +212,25 @@ export default function HomePage() {
 
   useEffect(() => {
     if (city) {
-      loadEvents(query, city, filters);
+      loadEvents(query, city, filters, searchType);
     } else {
-      loadEvents(query, "", filters); // fallback without location
+      loadEvents(query, "", filters, searchType); // fallback without location
     }
-  }, [city, filters]);
+  }, [city, filters, searchType]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    loadEvents(query, city, filters);
+    loadEvents(query, city, filters, searchType);
   };
 
   const handleFiltersChange = (newFilters: any) => {
     setFilters(newFilters);
-    loadEvents(query, city, newFilters);
+    loadEvents(query, city, newFilters, searchType);
+  };
+
+  const handleSearchTypeChange = (type: "events" | "hotels") => {
+    setSearchType(type);
+    setQuery(""); // Clear query when switching search types
   };
 
   const categories = [
@@ -209,6 +242,44 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen text-white select-none">
+      {/* AI Chat Floating Button */}
+      {!showAIChat && (
+        <button
+          onClick={() => setShowAIChat(true)}
+          className="fixed bottom-6 right-6 z-50 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-6 py-4 rounded-full shadow-2xl flex items-center gap-3 font-semibold transition-all duration-300 hover:scale-105"
+          style={{ boxShadow: '0 8px 32px rgba(139, 92, 246, 0.5)' }}
+        >
+          <span className="text-2xl">🤖</span>
+          <span>AI Assistant</span>
+        </button>
+      )}
+
+      {/* AI Chat Modal */}
+      {showAIChat && (
+        <div className="fixed bottom-6 right-6 z-50 w-96 max-w-[calc(100vw-3rem)]">
+          <AIChat onClose={() => setShowAIChat(false)} />
+        </div>
+      )}
+
+      {/* AI Itinerary Banner */}
+      <div className="mx-auto max-w-6xl px-4 mt-4 mb-4">
+        <div className="bg-gradient-to-r from-purple-600/20 to-blue-600/20 border border-purple-500/30 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">✨</span>
+            <div>
+              <h3 className="font-bold text-lg">AI-Powered Itinerary Generation</h3>
+              <p className="text-sm text-gray-300">Let AI create a complete travel plan for you!</p>
+            </div>
+          </div>
+          <Link
+            href="/travel-plans"
+            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 px-6 py-2 rounded-lg font-semibold transition-all duration-300 hover:scale-105"
+          >
+            Try It Now →
+          </Link>
+        </div>
+      </div>
+
       {/* Hero Section */}
       <section className="relative w-full py-16 text-center mx-auto max-w-6xl mt-6">
         <div className="rounded-3xl glass-dark shadow-glow px-4 sm:px-8 py-10">
@@ -222,7 +293,13 @@ export default function HomePage() {
 
           {/* SearchBar */}
           <div className="max-w-3xl mx-auto mb-6">
-            <SearchBar query={query} setQuery={setQuery} onSearch={handleSearch} />
+            <SearchBar 
+              query={query} 
+              setQuery={setQuery} 
+              onSearch={handleSearch}
+              searchType={searchType}
+              onSearchTypeChange={handleSearchTypeChange}
+            />
           </div>
 
           {/* Category Buttons */}
@@ -258,10 +335,7 @@ export default function HomePage() {
           </div>
           <div className="bg-gray-800/30 rounded-2xl p-6">
             <h2 className="text-2xl font-bold mb-4 text-center">🏨 Book Hotels</h2>
-            <div className="text-center text-gray-400">
-              <p className="mb-4">Hotel search functionality is available in the main events page.</p>
-              <p className="text-sm">You can add hotels to your travel plans from the search results.</p>
-            </div>
+            <HotelsPlanner />
           </div>
         </div>
       </div>
@@ -271,26 +345,95 @@ export default function HomePage() {
       {/* Results */}
       <div className="mx-auto max-w-6xl px-4 py-10">
         {loading && (
-          <p className="text-gray-400 text-lg text-center">⏳ Loading events near you...</p>
+          <p className="text-gray-400 text-lg text-center">
+            ⏳ Loading {searchType === "hotels" ? "hotels" : "events"} near you...
+          </p>
         )}
         {error && <p className="text-red-400 text-center">{error}</p>}
         {!loading && !error && (
           <>
-            <EventsSection
-              title="🎟 Ticketmaster Events"
-              events={ticketmasterEvents}
-              provider="Ticketmaster"
-            />
-            <EventsSection
-              title="📅 Eventbrite Events"
-              events={eventbriteEvents}
-              provider="Eventbrite"
-            />
-            <EventsSection
-              title="📄 European Events"
-              events={csvEvents}
-              provider="CSV"
-            />
+            {/* Hotel Results */}
+            {searchType === "hotels" && (
+              <div className="mb-8">
+                <h2 className="text-2xl font-bold text-white mb-6 text-center">
+                  🏨 Hotels in {query || city || "your area"}
+                </h2>
+                {hotels.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {hotels.slice(0, 12).map((hotel) => (
+                      <div key={hotel.id} className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
+                        <div className="flex justify-between items-start mb-2">
+                          <h3 className="text-lg font-semibold text-white">{hotel.name}</h3>
+                          {hotel.price_per_night && (
+                            <span className="text-green-400 font-bold">{hotel.price_per_night}</span>
+                          )}
+                        </div>
+                        <p className="text-gray-300 text-sm mb-2">📍 {hotel.address}</p>
+                        <p className="text-gray-300 text-sm mb-2">🏙️ {hotel.city}</p>
+                        {hotel.rating && (
+                          <p className="text-yellow-400 text-sm mb-3">
+                            ⭐ {hotel.rating.toFixed(1)}/10
+                            {hotel.review_count && ` (${hotel.review_count} reviews)`}
+                          </p>
+                        )}
+                        <div className="flex gap-2">
+                          {hotel.url && (
+                            <a
+                              href={hotel.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition"
+                            >
+                              🔗 Book Now
+                            </a>
+                          )}
+                          <AddToItinerary
+                            itemType="hotel"
+                            itemData={{
+                              title: hotel.name,
+                              description: `Hotel in ${hotel.city} - ${hotel.address}`,
+                              date: hotel.check_in,
+                              location: hotel.address,
+                              price: hotel.price_per_night ? parseFloat(hotel.price_per_night.replace(/[^0-9.-]+/g, '')) : undefined,
+                              url: hotel.url
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : !loading && (
+                  <div className="text-center py-12 bg-gray-800/30 rounded-lg border border-gray-700">
+                    <p className="text-gray-400 text-lg mb-2">😔 No hotels found</p>
+                    <p className="text-gray-500 text-sm">Try searching for a different city or check our hotels page</p>
+                    <a href="/hotels" className="inline-block mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
+                      🌐 Browse All Hotels
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Event Results */}
+            {searchType === "events" && (
+              <>
+                <EventsSection
+                  title="🎟 Ticketmaster Events"
+                  events={ticketmasterEvents}
+                  provider="Ticketmaster"
+                />
+                <EventsSection
+                  title="📅 Eventbrite Events"
+                  events={eventbriteEvents}
+                  provider="Eventbrite"
+                />
+                <EventsSection
+                  title="📄 European Events"
+                  events={csvEvents}
+                  provider="CSV"
+                />
+              </>
+            )}
           </>
         )}
       </div>
