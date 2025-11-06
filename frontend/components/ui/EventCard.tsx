@@ -15,10 +15,29 @@ export default function EventCard({ event, provider }: EventCardProps) {
 
   const fallback = useMemo(() => {
     const name: string = (event.name || "").toLowerCase();
-    if (name.includes("opera") || name.includes("theatre") || name.includes("theater")) return "/window.svg";
-    if (name.includes("concert") || name.includes("music") || name.includes("festival")) return "/vercel.svg";
-    if (name.includes("museum") || name.includes("art") || name.includes("exhibition")) return "/file.svg";
-    return "/globe.svg";
+    
+    // Use Unsplash for better dummy images based on event type
+    if (name.includes("opera") || name.includes("theatre") || name.includes("theater")) {
+      return "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=500&h=300&fit=crop&crop=center";
+    }
+    if (name.includes("concert") || name.includes("music") || name.includes("festival")) {
+      return "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=500&h=300&fit=crop&crop=center";
+    }
+    if (name.includes("museum") || name.includes("art") || name.includes("exhibition")) {
+      return "https://images.unsplash.com/photo-1541961017774-22349e4a1262?w=500&h=300&fit=crop&crop=center";
+    }
+    if (name.includes("sports") || name.includes("game") || name.includes("match")) {
+      return "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=500&h=300&fit=crop&crop=center";
+    }
+    if (name.includes("food") || name.includes("dinner") || name.includes("restaurant")) {
+      return "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=500&h=300&fit=crop&crop=center";
+    }
+    if (name.includes("comedy") || name.includes("standup") || name.includes("joke")) {
+      return "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=500&h=300&fit=crop&crop=center";
+    }
+    
+    // Default to a nice event/entertainment image
+    return "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=500&h=300&fit=crop&crop=center";
   }, [event?.name]);
 
   const preferred = event.images?.[0]?.url as string | undefined;

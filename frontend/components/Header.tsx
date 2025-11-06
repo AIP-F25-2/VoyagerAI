@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import AuthModal from './AuthModal';
 import UserProfile from './UserProfile';
@@ -10,6 +12,7 @@ export default function Header() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const pathname = usePathname();
 
   const handleAuthClick = (mode: 'login' | 'signup') => {
     setAuthMode(mode);
@@ -32,9 +35,45 @@ export default function Header() {
   return (
     <>
       <header className="p-4 bg-black/40 backdrop-blur-md border-b border-white/10 flex items-center justify-between sticky top-0 z-50 glass-dark">
-        <h1 className="text-3xl font-extrabold text-white tracking-wide select-none">
-          VOYAGERAI <span className="text-sm font-normal text-gray-300">Team Odyssey</span>
-        </h1>
+        <div className="flex items-center space-x-8">
+          <h1 className="text-3xl font-extrabold text-white tracking-wide select-none">
+            VOYAGERAI <span className="text-sm font-normal text-gray-300">Team Odyssey</span>
+          </h1>
+          
+          {/* Navigation Links */}
+          <nav className="hidden md:flex items-center space-x-6">
+            <Link
+              href="/"
+              className={`px-3 py-2 rounded-lg transition ${
+                pathname === "/"
+                  ? "bg-blue-600/30 text-blue-300"
+                  : "text-gray-300 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              🎟️ Events
+            </Link>
+            <Link
+              href="/hotels"
+              className={`px-3 py-2 rounded-lg transition ${
+                pathname === "/hotels"
+                  ? "bg-blue-600/30 text-blue-300"
+                  : "text-gray-300 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              🏨 Hotels
+            </Link>
+            <Link
+              href="/travel-plans"
+              className={`px-3 py-2 rounded-lg transition ${
+                pathname === "/travel-plans"
+                  ? "bg-blue-600/30 text-blue-300"
+                  : "text-gray-300 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              📋 Travel Plans
+            </Link>
+          </nav>
+        </div>
         
         <div className="flex items-center space-x-4">
           {isAuthenticated && user ? (

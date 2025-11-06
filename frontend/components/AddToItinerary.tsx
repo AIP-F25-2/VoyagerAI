@@ -32,6 +32,11 @@ export default function AddToItinerary({ itemType, itemData, onAdded }: AddToIti
   const [showModal, setShowModal] = useState(false)
   const [selectedItinerary, setSelectedItinerary] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
+  const [creatingPlan, setCreatingPlan] = useState(false)
+  const [newPlan, setNewPlan] = useState({
+    title: '',
+    destination: '',
+  })
 
   useEffect(() => {
     if (isAuthenticated && user?.id && showModal) {
@@ -41,13 +46,46 @@ export default function AddToItinerary({ itemType, itemData, onAdded }: AddToIti
 
   const fetchItineraries = async () => {
     try {
-      const response = await fetch(`/api/travel-plans?user_id=${user?.id}`)
+      // Hit backend directly via rewrite using canonical backend route name
+      const response = await fetch(`/api/itineraries?user_id=${user?.id}`)
       const data = await response.json()
       if (data.success) {
-        setTravelPlans(data.travel_plans)
+        // Backend returns key `itineraries`; normalize here for the modal
+        setTravelPlans(data.itineraries || data.travel_plans || [])
       }
     } catch (error) {
       console.error('Failed to fetch travel plans:', error)
+    }
+  }
+
+  const handleCreateItinerary = async () => {
+    if (!user?.id || !newPlan.title.trim()) return
+    setCreatingPlan(true)
+    try {
+      const res = await fetch('/api/travel-plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: parseInt(user.id),
+          title: newPlan.title.trim(),
+          destination: newPlan.destination.trim() || undefined,
+          status: 'draft',
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success && data.itinerary) {
+        // Refresh list and preselect the new plan
+        await fetchItineraries()
+        setSelectedItinerary(data.itinerary.id)
+        setNewPlan({ title: '', destination: '' })
+        alert('Travel plan created')
+      } else {
+        alert(data.error || 'Failed to create travel plan')
+      }
+    } catch (e) {
+      alert('Failed to create travel plan')
+    } finally {
+      setCreatingPlan(false)
     }
   }
 
@@ -56,7 +94,8 @@ export default function AddToItinerary({ itemType, itemData, onAdded }: AddToIti
 
     setLoading(true)
     try {
-      const response = await fetch(`/api/travel-plans/${selectedItinerary}/items`, {
+      // Use backend route name so Next.js rewrite proxies correctly
+      const response = await fetch(`/api/itineraries/${selectedItinerary}/items`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -71,18 +110,19 @@ export default function AddToItinerary({ itemType, itemData, onAdded }: AddToIti
           price: itemData.price,
           url: itemData.url,
           image_url: itemData.image_url,
+          status: 'planned',
           order_index: 0
         }),
       })
 
       const data = await response.json()
-      if (data.success) {
+      if (response.ok && data.success) {
         setShowModal(false)
         setSelectedItinerary(null)
         if (onAdded) onAdded()
         alert('Item added to travel plan successfully!')
       } else {
-        alert(data.error || 'Failed to add item to travel plan')
+        alert(data.error || `Failed to add item to travel plan`)
       }
     } catch (error) {
       console.error('Failed to add item to travel plan:', error)
@@ -153,15 +193,30 @@ export default function AddToItinerary({ itemType, itemData, onAdded }: AddToIti
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Select Itinerary
                 </label>
-                {travelPlans.length === 0 ? (
-                  <div className="text-center py-4">
-                    <p className="text-gray-500 mb-4">No travel plans found</p>
-                    <a
-                      href="/travel-plans"
-                      className="text-blue-600 hover:text-blue-700 text-sm"
+                {!travelPlans || travelPlans.length === 0 ? (
+                  <div className="space-y-3">
+                    <div className="text-gray-600 text-sm">No travel plans found. Create one:</div>
+                    <input
+                      type="text"
+                      placeholder="Trip title (e.g., Toronto Weekend)"
+                      value={newPlan.title}
+                      onChange={(e)=>setNewPlan({...newPlan, title: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Destination (optional)"
+                      value={newPlan.destination}
+                      onChange={(e)=>setNewPlan({...newPlan, destination: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      onClick={handleCreateItinerary}
+                      disabled={!newPlan.title.trim() || creatingPlan}
+                      className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg"
                     >
-                      Create your first travel plan →
-                    </a>
+                      {creatingPlan ? 'Creating...' : 'Create Travel Plan'}
+                    </button>
                   </div>
                 ) : (
                   <select
