@@ -171,12 +171,16 @@ class Hotel(db.Model):
     name = db.Column(db.String(300), nullable=False)
     city = db.Column(db.String(120), nullable=True)
     address = db.Column(db.String(500), nullable=True)
+    location = db.Column(db.String(200), nullable=True)  # Full location string from CSV
     rating = db.Column(db.Float, nullable=True)
+    review_count = db.Column(db.Integer, nullable=True)
     price_per_night = db.Column(db.String(50), nullable=True)
-    url = db.Column(db.String(1000), nullable=True)
+    url = db.Column(db.Text, nullable=True)
     check_in = db.Column(db.Date, nullable=True)
     check_out = db.Column(db.Date, nullable=True)
+    source = db.Column(db.String(50), default='csv')  # csv, api, manual
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def to_dict(self):
         return {
@@ -184,11 +188,16 @@ class Hotel(db.Model):
             "name": self.name,
             "city": self.city,
             "address": self.address,
+            "location": self.location,
             "rating": self.rating,
+            "review_count": self.review_count,
             "price_per_night": self.price_per_night,
             "url": self.url,
             "check_in": self.check_in.isoformat() if self.check_in else None,
             "check_out": self.check_out.isoformat() if self.check_out else None,
+            "source": self.source,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat()
         }
 
 
