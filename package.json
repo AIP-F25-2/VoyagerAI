@@ -1,0 +1,10 @@
+{
+  "name": "voyagerai",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "./start_all.sh",
+    "dev:backend": "./start_backend.sh",
+    "dev:frontend": "./start_frontend.sh"
+  }
+}

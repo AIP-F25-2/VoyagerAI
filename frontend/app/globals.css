@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+html,
+body {
+  @apply bg-gradient-to-br from-blue-950 via-neutral-900 to-black text-white min-h-screen;
+  background-attachment: fixed;
+}
+
+.glass {
+  @apply bg-white/10 backdrop-blur-lg border border-white/20 shadow-lg;
+}
+
+.glass-dark {
+  @apply bg-black/30 backdrop-blur-md border border-white/10 shadow-md;
+}
+
+.glass-light {
+  @apply bg-white/20 backdrop-blur-md border border-white/10 shadow-md;
+}
+
+.shadow-glow {
+  box-shadow: 0 0 30px rgba(206, 206, 206, 0.5);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, #2563eb, #60a5fa);
+  border-radius: 10px;
+}
+
