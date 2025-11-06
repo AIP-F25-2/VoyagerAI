@@ -1,9 +1,10 @@
 from flask import Blueprint, jsonify, request
-from .models import db, Event, Favorite, EventShare, EventReview, Subscription, Itinerary, ItineraryItem
+from .models import db, Event, Favorite, EventShare, EventReview, Subscription, Itinerary, ItineraryItem, Hotel
 from .__init__ import cache, limiter
 from .services.notification_service import notification_service
 from .services.recommendation_service import recommendation_service
-from .services.hotels import search_hotels
+from .services.llm_service import llm_service
+from .services.hotels import search_hotels, get_hotels_by_city, get_all_hotels, search_hotels_by_query
 from .services.flights import search_flights
 from .services.scraper import (
     scrape_bookmyshow_events, 
@@ -597,6 +598,292 @@ def hotels_search():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@bp.route("/hotels")
+def get_hotels():
+    """Get hotels with optional filtering"""
+    try:
+        city = request.args.get("city", "").strip()
+        query = request.args.get("q", "").strip()
+        min_rating = request.args.get("min_rating", type=float)
+        limit = int(request.args.get("limit", "20") or 20)
+        page = max(1, int(request.args.get("page", 1)))
+        page_size = max(1, min(100, int(request.args.get("page_size", limit))))
+
+        # Get hotels based on filters
+        if city:
+            hotels = get_hotels_by_city(city, limit)
+        elif query:
+            hotels = search_hotels_by_query(query, limit)
+        else:
+            hotels = get_all_hotels(limit)
+
+        # Apply additional filters
+        if min_rating:
+            hotels = [h for h in hotels if h.get('rating', 0) >= min_rating]
+
+        # Pagination
+        total = len(hotels)
+        start = (page - 1) * page_size
+        end = start + page_size
+        paginated_hotels = hotels[start:end]
+
+        return jsonify({
+            "success": True,
+            "hotels": paginated_hotels,
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": total
+            }
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/hotels/cities")
+def get_hotel_cities():
+    """Get list of cities with available hotels"""
+    try:
+        # Get unique cities from database
+        cities = set()
+        
+        # Get cities from CSV loader
+        from .services.hotels import hotel_csv_loader
+        for hotel in hotel_csv_loader.hotels_data:
+            if hotel.get('city') and hotel['city'] != 'Unknown':
+                cities.add(hotel['city'])
+        
+        # Get cities from database
+        db_cities = db.session.query(Hotel.city).filter(Hotel.city.isnot(None), Hotel.city != 'Unknown').distinct().all()
+        for (city,) in db_cities:
+            if city:
+                cities.add(city)
+        
+        return jsonify({
+            "success": True,
+            "cities": sorted(list(cities))
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/hotels/<hotel_id>")
+def get_hotel_details(hotel_id):
+    """Get detailed information about a specific hotel"""
+    try:
+        from .services.hotels import hotel_csv_loader
+        
+        # Find hotel by ID
+        hotel = None
+        for h in hotel_csv_loader.hotels_data:
+            if h.get('id') == hotel_id:
+                hotel = h
+                break
+        
+        if not hotel:
+            return jsonify({"success": False, "error": "Hotel not found"}), 404
+        
+        return jsonify({
+            "success": True,
+            "hotel": hotel
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/hotels/popular")
+def get_popular_hotels():
+    """Get popular hotels (highest rated)"""
+    try:
+        limit = int(request.args.get("limit", "10") or 10)
+        city = request.args.get("city", "").strip()
+        
+        from .services.hotels import hotel_csv_loader
+        
+        # Get hotels from CSV data
+        hotels = hotel_csv_loader.hotels_data.copy()
+        
+        # Also get hotels from database
+        try:
+            db_hotels = Hotel.query.all()
+            for hotel in db_hotels:
+                hotel_dict = hotel.to_dict()
+                # Convert database hotel to same format as CSV hotels
+                hotel_dict['id'] = f"hotel_{hotel.id}"
+                hotels.append(hotel_dict)
+        except Exception as e:
+            print(f"Error getting hotels from database: {e}")
+        
+        # Filter by city if provided
+        if city:
+            city_lower = city.lower()
+            hotels = [h for h in hotels if city_lower in h.get('city', '').lower()]
+        
+        # Sort by rating (highest first), handle None values
+        hotels.sort(key=lambda x: x.get('rating') or 0, reverse=True)
+        
+        return jsonify({
+            "success": True,
+            "hotels": hotels[:limit]
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# Database CRUD operations for hotels
+@bp.route("/hotels/db", methods=["GET"])
+def get_hotels_from_db():
+    """Get hotels from database with filtering"""
+    try:
+        city = request.args.get("city", "").strip()
+        min_rating = request.args.get("min_rating", type=float)
+        limit = int(request.args.get("limit", "20") or 20)
+        page = max(1, int(request.args.get("page", 1)))
+        page_size = max(1, min(100, int(request.args.get("page_size", limit))))
+
+        query = Hotel.query
+
+        # Apply filters
+        if city:
+            query = query.filter(Hotel.city.ilike(f"%{city}%"))
+        
+        if min_rating:
+            query = query.filter(Hotel.rating >= min_rating)
+
+        # Get total count for pagination
+        total = query.count()
+        
+        # Apply pagination
+        hotels = query.order_by(Hotel.rating.desc().nullslast()).offset((page - 1) * page_size).limit(page_size).all()
+
+        return jsonify({
+            "success": True,
+            "hotels": [hotel.to_dict() for hotel in hotels],
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": total
+            }
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/hotels/db/<int:hotel_id>", methods=["GET"])
+def get_hotel_from_db(hotel_id):
+    """Get a specific hotel from database"""
+    try:
+        hotel = Hotel.query.get_or_404(hotel_id)
+        return jsonify({
+            "success": True,
+            "hotel": hotel.to_dict()
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/hotels/db", methods=["POST"])
+@limiter.limit("10/minute")
+def create_hotel():
+    """Create a new hotel in database"""
+    try:
+        data = request.get_json() or {}
+        
+        name = data.get("name", "").strip()
+        city = data.get("city", "").strip()
+        address = data.get("address", "").strip()
+        location = data.get("location", "").strip()
+        rating = data.get("rating")
+        review_count = data.get("review_count")
+        price_per_night = data.get("price_per_night", "").strip()
+        url = data.get("url", "").strip()
+        
+        if not name:
+            return jsonify({"success": False, "error": "Hotel name is required"}), 400
+        
+        hotel = Hotel(
+            name=name,
+            city=city,
+            address=address,
+            location=location,
+            rating=rating,
+            review_count=review_count,
+            price_per_night=price_per_night,
+            url=url,
+            source="manual"
+        )
+        
+        db.session.add(hotel)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Hotel created successfully",
+            "hotel": hotel.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/hotels/db/<int:hotel_id>", methods=["PUT"])
+def update_hotel(hotel_id):
+    """Update a hotel in database"""
+    try:
+        hotel = Hotel.query.get_or_404(hotel_id)
+        data = request.get_json() or {}
+        
+        # Update fields if provided
+        if "name" in data:
+            hotel.name = data["name"].strip()
+        if "city" in data:
+            hotel.city = data["city"].strip()
+        if "address" in data:
+            hotel.address = data["address"].strip()
+        if "location" in data:
+            hotel.location = data["location"].strip()
+        if "rating" in data:
+            hotel.rating = data["rating"]
+        if "review_count" in data:
+            hotel.review_count = data["review_count"]
+        if "price_per_night" in data:
+            hotel.price_per_night = data["price_per_night"].strip()
+        if "url" in data:
+            hotel.url = data["url"].strip()
+        
+        hotel.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Hotel updated successfully",
+            "hotel": hotel.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/hotels/db/<int:hotel_id>", methods=["DELETE"])
+def delete_hotel(hotel_id):
+    """Delete a hotel from database"""
+    try:
+        hotel = Hotel.query.get_or_404(hotel_id)
+        db.session.delete(hotel)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Hotel deleted successfully"
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @bp.route("/flights/search")
 def flights_search():
     """Search flights via provider stub (extendable with real API)."""
@@ -1030,6 +1317,109 @@ def get_trending_events():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+# LLM endpoints
+@bp.route("/llm/chat", methods=["POST"])
+@limiter.limit("20/minute")
+def llm_chat():
+    """Chat with AI assistant"""
+    try:
+        data = request.get_json()
+        message = data.get("message", "").strip()
+        user_email = data.get("email", "").strip()
+        conversation_history = data.get("history", [])
+        
+        if not message:
+            return jsonify({"success": False, "error": "Message is required"}), 400
+        
+        result = llm_service.chat(
+            message=message,
+            user_email=user_email if user_email else None,
+            conversation_history=conversation_history
+        )
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@bp.route("/llm/recommendations/enhanced", methods=["POST"])
+@limiter.limit("10/minute")
+def get_enhanced_recommendations():
+    """Get AI-enhanced event recommendations"""
+    try:
+        data = request.get_json()
+        user_email = data.get("email", "").strip()
+        events = data.get("events", [])
+        limit = int(data.get("limit", 5))
+        
+        if not user_email:
+            return jsonify({"success": False, "error": "Email is required"}), 400
+        
+        if not events:
+            return jsonify({"success": False, "error": "Events list is required"}), 400
+        
+        enhanced = llm_service.get_enhanced_recommendations(
+            user_email=user_email,
+            events=events,
+            limit=limit
+        )
+        
+        return jsonify({
+            "success": True,
+            "recommendations": enhanced,
+            "total": len(enhanced)
+        })
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@bp.route("/llm/itinerary/generate", methods=["POST"])
+@limiter.limit("5/minute")
+def generate_itinerary():
+    """Generate AI-powered itinerary suggestions"""
+    try:
+        data = request.get_json()
+        destination = data.get("destination", "").strip()
+        start_date = data.get("start_date", "").strip()
+        end_date = data.get("end_date", "").strip()
+        events = data.get("events", [])
+        hotels = data.get("hotels", [])
+        preferences = data.get("preferences", {})
+        
+        if not destination or not start_date or not end_date:
+            return jsonify({"success": False, "error": "Destination, start_date, and end_date are required"}), 400
+        
+        result = llm_service.generate_itinerary_suggestions(
+            destination=destination,
+            start_date=start_date,
+            end_date=end_date,
+            events=events,
+            hotels=hotels,
+            preferences=preferences
+        )
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@bp.route("/llm/status")
+def llm_status():
+    """Check LLM service status with detailed diagnostics"""
+    import os
+    api_key_set = bool(os.getenv("OPENAI_API_KEY", "").strip())
+    api_key_length = len(os.getenv("OPENAI_API_KEY", "").strip()) if api_key_set else 0
+    
+    return jsonify({
+        "available": llm_service.is_available(),
+        "model": llm_service.model if llm_service.is_available() else None,
+        "api_key_configured": api_key_set,
+        "api_key_length": api_key_length if api_key_set else 0,
+        "openai_library_installed": True,  # We'll check this in the service
+        "message": "LLM service is ready" if llm_service.is_available() else 
+                   ("API key not configured" if not api_key_set else "OpenAI client initialization failed")
+    })
+
 # Subscription endpoints
 @bp.route("/subscription/plans")
 def get_subscription_plans():
@@ -1434,15 +1824,16 @@ def add_itinerary_item(itinerary_id):
         itinerary = Itinerary.query.get_or_404(itinerary_id)
         data = request.get_json() or {}
         
-        item_type = data.get("item_type", "").strip()
-        title = data.get("title", "").strip()
-        description = data.get("description", "").strip()
+        # Coalesce possible nulls to empty strings before stripping to avoid AttributeError
+        item_type = (data.get("item_type") or "").strip()
+        title = (data.get("title") or "").strip()
+        description = (data.get("description") or "").strip()
         date = data.get("date")
         time = data.get("time")
-        location = data.get("location", "").strip()
+        location = (data.get("location") or "").strip()
         price = data.get("price")
-        url = data.get("url", "").strip()
-        image_url = data.get("image_url", "").strip()
+        url = (data.get("url") or "").strip()
+        image_url = (data.get("image_url") or "").strip()
         order_index = data.get("order_index", 0)
         
         if not item_type:

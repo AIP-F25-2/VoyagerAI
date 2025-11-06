@@ -26,3 +26,6 @@ pandas==2.1.4
 beautifulsoup4==4.12.2
 python-dateutil==2.9.0.post0
 gunicorn==21.2.0
+
+# LLM dependencies
+openai>=2.7.1
