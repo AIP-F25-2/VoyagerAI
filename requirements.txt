@@ -1,5 +1,0 @@
-streamlit>=1.37.0
-pandas>=2.2.2
-openai>=1.42.0
-python-dotenv>=1.0.1
-tenacity>=8.5.0
