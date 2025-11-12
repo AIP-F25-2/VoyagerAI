@@ -152,6 +152,108 @@ export default function HomePage() {
     );
   };
 
+  // Helper functions for loadEvents
+  const buildHotelsParams = (search: string, detectedCity: string): URLSearchParams => {
+    const params = new URLSearchParams();
+    if (search) params.append("city", search);
+    else if (detectedCity) params.append("city", detectedCity);
+    params.append("limit", "20");
+    return params;
+  };
+
+  const buildEventsParams = (search: string, detectedCity: string, appliedFilters: any): URLSearchParams => {
+    const params = new URLSearchParams();
+    if (search) params.append("q", search);
+    if (detectedCity) params.append("city", detectedCity);
+    
+    Object.entries(appliedFilters).forEach(([key, value]) => {
+      if (value && value !== "" && value !== "all") {
+        params.append(key, value as string);
+      }
+    });
+    
+    if (!params.has("limit")) {
+      params.append("limit", "50");
+    }
+    return params;
+  };
+
+  const handleHotelsResponse = async (params: URLSearchParams) => {
+    const res = await fetch(`/api/hotels/search?${params.toString()}`);
+    if (!res.ok) throw new Error("Backend unavailable or API error");
+    const data = await res.json();
+    setHotels(data.hotels || []);
+    setTicketmasterEvents([]);
+    setEventbriteEvents([]);
+    setCsvEvents([]);
+  };
+
+  const extractIndividualArrays = (data: any) => {
+    const tmEvents = Array.isArray(data.ticketmaster) ? data.ticketmaster : [];
+    const ebEvents = Array.isArray(data.eventbrite) ? data.eventbrite : [];
+    const csvEvts = Array.isArray(data.csv_events) ? data.csv_events : [];
+    
+    console.log('📦 Received data from API:', {
+      ticketmaster: tmEvents.length,
+      eventbrite: ebEvents.length,
+      csv: csvEvts.length,
+      firstTMName: tmEvents.length > 0 ? tmEvents[0]?.name : 'none',
+      firstEBName: ebEvents.length > 0 ? ebEvents[0]?.name : 'none',
+      firstCSVName: csvEvts.length > 0 ? csvEvts[0]?.name : 'none'
+    });
+    
+    setTicketmasterEvents(tmEvents);
+    setEventbriteEvents(ebEvents);
+    setCsvEvents(csvEvts);
+    
+    console.log('✅ Setting events state:', {
+      ticketmaster: tmEvents.length,
+      eventbrite: ebEvents.length,
+      csv: csvEvts.length
+    });
+  };
+
+  const handleMergedArray = (data: any) => {
+    const merged = data.merged || [];
+    setTicketmasterEvents(merged.filter((e: any) => 
+      !e.source || e.source === "ticketmaster" || e.source === "unknown"
+    ));
+    setEventbriteEvents(merged.filter((e: any) => e.source === "eventbrite"));
+    setCsvEvents(merged.filter((e: any) => e.source === "csv"));
+  };
+
+  const clearAllEvents = () => {
+    setTicketmasterEvents([]);
+    setEventbriteEvents([]);
+    setCsvEvents([]);
+  };
+
+  const handleEventsResponse = async (params: URLSearchParams, data: any) => {
+    const hasIndividualArrays = data.ticketmaster !== undefined || 
+                                 data.eventbrite !== undefined || 
+                                 data.csv_events !== undefined;
+    
+    if (hasIndividualArrays) {
+      extractIndividualArrays(data);
+    } else if (data.merged && Array.isArray(data.merged) && data.merged.length > 0) {
+      handleMergedArray(data);
+    } else {
+      clearAllEvents();
+    }
+    
+    console.log('📊 Events loaded from API:', {
+      ticketmaster: Array.isArray(data.ticketmaster) ? data.ticketmaster.length : 0,
+      eventbrite: Array.isArray(data.eventbrite) ? data.eventbrite.length : 0,
+      csv: Array.isArray(data.csv_events) ? data.csv_events.length : 0,
+      merged: Array.isArray(data.merged) ? data.merged.length : 0,
+      source: data.source,
+      hasTicketmasterKey: 'ticketmaster' in data,
+      ticketmasterType: typeof data.ticketmaster,
+      firstTMName: Array.isArray(data.ticketmaster) && data.ticketmaster.length > 0 ? data.ticketmaster[0]?.name : 'none'
+    });
+    setHotels([]);
+  };
+
   const loadEvents = async (search: string, detectedCity = "", appliedFilters = {}, searchMode: "events" | "hotels" = "events") => {
     setLoading(true);
     setError(null);
@@ -163,111 +265,18 @@ export default function HomePage() {
     });
     try {
       if (searchMode === "hotels") {
-        // Search hotels
-        const params = new URLSearchParams();
-        if (search) params.append("city", search);
-        else if (detectedCity) params.append("city", detectedCity);
-        params.append("limit", "20");
-
-        const res = await fetch(`/api/hotels/search?${params.toString()}`);
-        if (!res.ok) throw new Error("Backend unavailable or API error");
-        const data = await res.json();
-        setHotels(data.hotels || []);
-        // Clear events when searching hotels
-        setTicketmasterEvents([]);
-        setEventbriteEvents([]);
-        setCsvEvents([]);
+        const params = buildHotelsParams(search, detectedCity);
+        await handleHotelsResponse(params);
       } else {
-        // Search events (existing logic)
-        const params = new URLSearchParams();
-        if (search) params.append("q", search);
-        if (detectedCity) params.append("city", detectedCity);
-        
-        // Add filter parameters (only non-empty values)
-        Object.entries(appliedFilters).forEach(([key, value]) => {
-          if (value && value !== "" && value !== "all") {
-            params.append(key, value as string);
-          }
-        });
-        
-        // Always add limit to ensure we get results
-        if (!params.has("limit")) {
-          params.append("limit", "50");
-        }
-
+        const params = buildEventsParams(search, detectedCity, appliedFilters);
         const res = await fetch(`/api/events?${params.toString()}`);
         if (!res.ok) throw new Error("Backend unavailable or API error");
         const data = await res.json();
-        
-        // Handle both Elasticsearch (merged) and fallback responses
-        // Always use individual arrays if they exist (even if empty), otherwise use merged array
-        const hasIndividualArrays = data.ticketmaster !== undefined || 
-                                     data.eventbrite !== undefined || 
-                                     data.csv_events !== undefined;
-        
-        if (hasIndividualArrays) {
-          // Use individual arrays (preferred - most reliable)
-          // Always set these, even if empty arrays, to show proper "no events" messages
-          const tmEvents = Array.isArray(data.ticketmaster) ? data.ticketmaster : [];
-          const ebEvents = Array.isArray(data.eventbrite) ? data.eventbrite : [];
-          const csvEvts = Array.isArray(data.csv_events) ? data.csv_events : [];
-          
-          // Debug: Log what we received before setting
-          console.log('📦 Received data from API:', {
-            ticketmaster: tmEvents.length,
-            eventbrite: ebEvents.length,
-            csv: csvEvts.length,
-            firstTMName: tmEvents.length > 0 ? tmEvents[0]?.name : 'none',
-            firstEBName: ebEvents.length > 0 ? ebEvents[0]?.name : 'none',
-            firstCSVName: csvEvts.length > 0 ? csvEvts[0]?.name : 'none'
-          });
-          
-          // Set all states together to ensure proper updates
-          setTicketmasterEvents(tmEvents);
-          setEventbriteEvents(ebEvents);
-          setCsvEvents(csvEvts);
-          
-          // Debug: Log what we're setting
-          console.log('✅ Setting events state:', {
-            ticketmaster: tmEvents.length,
-            eventbrite: ebEvents.length,
-            csv: csvEvts.length
-          });
-        } else if (data.merged && Array.isArray(data.merged) && data.merged.length > 0) {
-          // Fallback: Split merged array by source (for Elasticsearch responses)
-          // Note: "unknown" source events are treated as Ticketmaster (legacy indexed events)
-          const merged = data.merged || [];
-          setTicketmasterEvents(merged.filter((e: any) => 
-            !e.source || e.source === "ticketmaster" || e.source === "unknown"
-          ));
-          setEventbriteEvents(merged.filter((e: any) => e.source === "eventbrite"));
-          setCsvEvents(merged.filter((e: any) => e.source === "csv"));
-        } else {
-          // No events found
-          setTicketmasterEvents([]);
-          setEventbriteEvents([]);
-          setCsvEvents([]);
-        }
-        
-        // Debug logging (remove in production)
-        console.log('📊 Events loaded from API:', {
-          ticketmaster: Array.isArray(data.ticketmaster) ? data.ticketmaster.length : 0,
-          eventbrite: Array.isArray(data.eventbrite) ? data.eventbrite.length : 0,
-          csv: Array.isArray(data.csv_events) ? data.csv_events.length : 0,
-          merged: Array.isArray(data.merged) ? data.merged.length : 0,
-          source: data.source,
-          hasTicketmasterKey: 'ticketmaster' in data,
-          ticketmasterType: typeof data.ticketmaster,
-          firstTMName: Array.isArray(data.ticketmaster) && data.ticketmaster.length > 0 ? data.ticketmaster[0]?.name : 'none'
-        });
-        // Clear hotels when searching events
-        setHotels([]);
+        await handleEventsResponse(params, data);
       }
     } catch (err: any) {
       setError(err.message || "Failed to fetch data");
-      setTicketmasterEvents([]);
-      setEventbriteEvents([]);
-      setCsvEvents([]);
+      clearAllEvents();
       setHotels([]);
     } finally {
       setLoading(false);
