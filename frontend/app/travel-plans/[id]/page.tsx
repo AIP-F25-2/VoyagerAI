@@ -262,7 +262,7 @@ export default function ItineraryDetailPage() {
   const handleUpdateBudget = async () => {
     // Sanitize input like "1,200.50" → 1200.50 and prevent huge floats
     const sanitized = (newBudget || '').replace(/[^0-9.]/g, '')
-    if (!sanitized || isNaN(Number(sanitized))) {
+    if (!sanitized || Number.isNaN(Number(sanitized))) {
       alert('Please enter a valid budget amount')
       return
     }
@@ -284,6 +284,49 @@ export default function ItineraryDetailPage() {
       console.error('Failed to update budget:', error)
       alert('Failed to update budget')
     }
+  }
+
+  // Helper functions to extract nested ternary operations
+  const formatBudgetDisplay = (budget: number | null): string => {
+    if (budget == null) return 'Not set'
+    return `$${budget.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+  }
+
+  const getBudgetStatusBadgeClass = (percentage: number): string => {
+    if (percentage >= 100) return 'bg-red-500'
+    if (percentage >= 80) return 'bg-yellow-500'
+    return 'bg-green-500'
+  }
+
+  const getBudgetStatusText = (percentage: number): string => {
+    if (percentage >= 100) return 'Over Budget!'
+    if (percentage >= 80) return 'Near Limit'
+    return 'On Track'
+  }
+
+  const getProgressBarColorClass = (percentage: number): string => {
+    if (percentage >= 100) return 'bg-red-500'
+    if (percentage >= 80) return 'bg-yellow-500'
+    return 'bg-green-500'
+  }
+
+  const getRemainingBudgetClass = (remaining: number): string => {
+    return remaining >= 0 ? 'text-green-400' : 'text-red-400'
+  }
+
+  const formatRemainingBudget = (remaining: number): string => {
+    if (remaining >= 0) {
+      return `$${remaining.toLocaleString()} remaining`
+    }
+    return `$${Math.abs(remaining).toLocaleString()} over budget`
+  }
+
+  const getCategoryEmoji = (category: string): string => {
+    if (category === 'hotel') return '🏨'
+    if (category === 'event') return '🎵'
+    if (category === 'flight') return '✈️'
+    if (category === 'activity') return '🎯'
+    return '📍'
   }
 
   const generateAIItinerary = async (customHints?: string) => {
@@ -677,9 +720,7 @@ export default function ItineraryDetailPage() {
             <div>
               <h3 className="font-semibold text-gray-300 mb-2">Budget</h3>
               <p className="text-lg">
-                {itinerary.budget != null ?
-                  `$${itinerary.budget.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
-                  : 'Not set'}
+                {formatBudgetDisplay(itinerary.budget)}
               </p>
             </div>
             <div>
@@ -716,14 +757,8 @@ export default function ItineraryDetailPage() {
                 >
                   ✏️ Edit Budget
                 </button>
-                <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  budgetStats.percentage >= 100 ? 'bg-red-500' :
-                  budgetStats.percentage >= 80 ? 'bg-yellow-500' :
-                  'bg-green-500'
-                }`}>
-                  {budgetStats.percentage >= 100 ? 'Over Budget!' :
-                   budgetStats.percentage >= 80 ? 'Near Limit' :
-                   'On Track'}
+                <div className={`px-3 py-1 rounded-full text-sm font-medium ${getBudgetStatusBadgeClass(budgetStats.percentage)}`}>
+                  {getBudgetStatusText(budgetStats.percentage)}
                 </div>
               </div>
             </div>
@@ -736,11 +771,7 @@ export default function ItineraryDetailPage() {
               </div>
               <div className="w-full bg-gray-700 rounded-full h-3">
                 <div 
-                  className={`h-3 rounded-full transition-all duration-500 ${
-                    budgetStats.percentage >= 100 ? 'bg-red-500' :
-                    budgetStats.percentage >= 80 ? 'bg-yellow-500' :
-                    'bg-green-500'
-                  }`}
+                  className={`h-3 rounded-full transition-all duration-500 ${getProgressBarColorClass(budgetStats.percentage)}`}
                   style={{ width: `${Math.min(budgetStats.percentage, 100)}%` }}
                 ></div>
               </div>
@@ -748,13 +779,8 @@ export default function ItineraryDetailPage() {
                 <span className="text-sm text-gray-400">
                   {budgetStats.percentage.toFixed(1)}% used
                 </span>
-                <span className={`text-sm font-medium ${
-                  budgetStats.remaining >= 0 ? 'text-green-400' : 'text-red-400'
-                }`}>
-                  {budgetStats.remaining >= 0 ? 
-                    `$${budgetStats.remaining.toLocaleString()} remaining` : 
-                    `$${Math.abs(budgetStats.remaining).toLocaleString()} over budget`
-                  }
+                <span className={`text-sm font-medium ${getRemainingBudgetClass(budgetStats.remaining)}`}>
+                  {formatRemainingBudget(budgetStats.remaining)}
                 </span>
               </div>
             </div>
@@ -768,11 +794,7 @@ export default function ItineraryDetailPage() {
                     <div key={category} className="bg-gray-700/50 p-4 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-lg">
-                          {category === 'hotel' ? '🏨' :
-                           category === 'event' ? '🎵' :
-                           category === 'flight' ? '✈️' :
-                           category === 'activity' ? '🎯' :
-                           '📍'}
+                          {getCategoryEmoji(category)}
                         </span>
                         <span className="font-medium capitalize">{category}</span>
                       </div>
@@ -829,8 +851,9 @@ export default function ItineraryDetailPage() {
             <form onSubmit={handleAddItem} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Type *</label>
+                  <label htmlFor="item_type" className="block text-sm font-medium mb-2">Type *</label>
                   <select
+                    id="item_type"
                     value={newItem.item_type}
                     onChange={(e) => setNewItem({...newItem, item_type: e.target.value})}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:border-blue-500"
@@ -844,8 +867,9 @@ export default function ItineraryDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Title *</label>
+                  <label htmlFor="item_title" className="block text-sm font-medium mb-2">Title *</label>
                   <input
+                    id="item_title"
                     type="text"
                     value={newItem.title}
                     onChange={(e) => setNewItem({...newItem, title: e.target.value})}
@@ -854,8 +878,9 @@ export default function ItineraryDetailPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Date</label>
+                  <label htmlFor="item_date" className="block text-sm font-medium mb-2">Date</label>
                   <input
+                    id="item_date"
                     type="date"
                     value={newItem.date}
                     onChange={(e) => setNewItem({...newItem, date: e.target.value})}
@@ -863,8 +888,9 @@ export default function ItineraryDetailPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Time</label>
+                  <label htmlFor="item_time" className="block text-sm font-medium mb-2">Time</label>
                   <input
+                    id="item_time"
                     type="time"
                     value={newItem.time}
                     onChange={(e) => setNewItem({...newItem, time: e.target.value})}
@@ -872,8 +898,9 @@ export default function ItineraryDetailPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Location</label>
+                  <label htmlFor="item_location" className="block text-sm font-medium mb-2">Location</label>
                   <input
+                    id="item_location"
                     type="text"
                     value={newItem.location}
                     onChange={(e) => setNewItem({...newItem, location: e.target.value})}
@@ -881,8 +908,9 @@ export default function ItineraryDetailPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Price ($)</label>
+                  <label htmlFor="item_price" className="block text-sm font-medium mb-2">Price ($)</label>
                   <input
+                    id="item_price"
                     type="number"
                     step="0.01"
                     value={newItem.price}
@@ -892,8 +920,9 @@ export default function ItineraryDetailPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">Description</label>
+                <label htmlFor="item_description" className="block text-sm font-medium mb-2">Description</label>
                 <textarea
+                  id="item_description"
                   value={newItem.description}
                   onChange={(e) => setNewItem({...newItem, description: e.target.value})}
                   rows={3}
@@ -1180,10 +1209,11 @@ export default function ItineraryDetailPage() {
                 </div>
 
                 <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="budget_amount" className="block text-sm font-medium text-gray-700 mb-2">
                     Budget Amount ($)
                   </label>
                   <input
+                    id="budget_amount"
                     type="number"
                     step="0.01"
                     min="0"
@@ -1309,10 +1339,11 @@ export default function ItineraryDetailPage() {
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="ai_hints" className="block text-sm font-medium text-gray-700 mb-2">
                       💡 Additional Hints/Instructions (Optional)
                     </label>
                     <textarea
+                      id="ai_hints"
                       value={aiHints}
                       onChange={(e) => setAiHints(e.target.value)}
                       placeholder="E.g., 'Focus on music events', 'Prefer budget-friendly hotels', 'Include outdoor activities', 'I love art museums', 'Avoid crowded tourist spots'..."
