@@ -911,7 +911,7 @@ def _scrape_bms_with_fallbacks(city, bms_limit):
 
 def _scrape_eventbrite_events_safe(eventbrite_limit):
     """Safely scrape Eventbrite events."""
-    eventbrite_events = scrape_eventbrite_events(months_ahead=1, limit=min(eventbrite_limit, 10))
+        eventbrite_events = scrape_eventbrite_events(limit=min(eventbrite_limit, 10))
     for event in eventbrite_events:
         event["source"] = "eventbrite"
         if event.get("location"):
