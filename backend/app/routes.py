@@ -1132,6 +1132,44 @@ def list_favorites():
     return success_response({"favorites": items})
 
 
+def _check_favorite_exists(user_email, title, url, data, provider):
+    """Check if a favorite already exists for the user."""
+    existing_q = Favorite.query
+    if user_email:
+        existing_q = existing_q.filter(Favorite.user_email == user_email)
+
+    # Prefer strong match by URL if available, otherwise fallback to title+date(+provider)
+    if url:
+        existing_q = existing_q.filter(Favorite.url == url)
+    else:
+        existing_q = existing_q.filter(Favorite.title == title)
+        try:
+            if data.get("date"):
+                date_val = datetime.fromisoformat(data["date"]).date()
+                existing_q = existing_q.filter(Favorite.date == date_val)
+        except (ValueError, TypeError):
+            # If date can't be parsed, rely on title-only match
+            pass
+        if provider:
+            existing_q = existing_q.filter(Favorite.provider == provider)
+
+    return existing_q.first()
+
+
+def _parse_favorite_dates(fav, data):
+    """Parse and set date/time for favorite if provided."""
+    try:
+        if data.get("date"):
+            fav.date = datetime.fromisoformat(data["date"]).date()
+    except (ValueError, TypeError):
+        pass
+    try:
+        if data.get("time"):
+            fav.time = datetime.strptime(data["time"], "%H:%M").time()
+    except (ValueError, TypeError):
+        pass
+
+
 @bp.route("/favorites", methods=["POST"]) 
 @limiter.limit("10/minute")
 def add_favorite():
@@ -1142,30 +1180,12 @@ def add_favorite():
         url = (data.get("url") or None)
         provider = data.get("provider")
 
-        # Duplicate prevention: same user cannot add the same event twice
-        existing_q = Favorite.query
-        if user_email:
-            existing_q = existing_q.filter(Favorite.user_email == user_email)
-
-        # Prefer strong match by URL if available, otherwise fallback to title+date(+provider)
-        if url:
-            existing_q = existing_q.filter(Favorite.url == url)
-        else:
-            existing_q = existing_q.filter(Favorite.title == title)
-            try:
-                if data.get("date"):
-                    date_val = datetime.fromisoformat(data["date"]).date()
-                    existing_q = existing_q.filter(Favorite.date == date_val)
-            except (ValueError, TypeError):
-                # If date can't be parsed, rely on title-only match
-                pass
-            if provider:
-                existing_q = existing_q.filter(Favorite.provider == provider)
-
-        existing = existing_q.first()
+        # Check if favorite already exists
+        existing = _check_favorite_exists(user_email, title, url, data, provider)
         if existing:
             return error_response("Favorite already exists for this user", 409)
 
+        # Create favorite
         fav = Favorite(
             user_email=user_email,
             title=title,
@@ -1175,17 +1195,9 @@ def add_favorite():
             image_url=data.get("image_url"),
             provider=provider,
         )
-        # parse date/time if provided
-        try:
-            if data.get("date"):
-                fav.date = datetime.fromisoformat(data["date"]).date()
-        except (ValueError, TypeError):
-            pass
-        try:
-            if data.get("time"):
-                fav.time = datetime.strptime(data["time"], "%H:%M").time()
-        except (ValueError, TypeError):
-            pass
+        
+        # Parse date/time if provided
+        _parse_favorite_dates(fav, data)
 
         db.session.add(fav)
         db.session.commit()
@@ -1304,6 +1316,42 @@ def get_filter_options():
         return error_response(str(e), 500)
 
 # Event Sharing endpoints
+def _generate_share_urls(platform, event_title, event_url, event_venue, event_city, event_date):
+    """Generate share URLs for different platforms."""
+    share_urls = {}
+    base_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+    target_url = event_url or base_url
+    
+    if platform == "facebook":
+        share_urls["facebook"] = f"https://www.facebook.com/sharer/sharer.php?u={target_url}"
+    elif platform == "twitter":
+        text = f"Check out this event: {event_title}"
+        if event_venue:
+            text += f" at {event_venue}"
+        share_urls["twitter"] = f"https://twitter.com/intent/tweet?text={text}&url={target_url}"
+    elif platform == "linkedin":
+        share_urls["linkedin"] = f"https://www.linkedin.com/sharing/share-offsite/?url={target_url}"
+    elif platform == "whatsapp":
+        text = f"Check out this event: {event_title}"
+        if event_venue:
+            text += f" at {event_venue}"
+        share_urls["whatsapp"] = f"https://wa.me/?text={text}%20{target_url}"
+    elif platform == "email":
+        subject = f"Event Recommendation: {event_title}"
+        body = f"Hi! I thought you might be interested in this event:\n\n{event_title}"
+        if event_venue:
+            body += f"\nVenue: {event_venue}"
+        if event_city:
+            body += f"\nCity: {event_city}"
+        if event_date:
+            body += f"\nDate: {event_date}"
+        if event_url:
+            body += f"\nMore info: {event_url}"
+        share_urls["email"] = f"mailto:?subject={subject}&body={body}"
+    
+    return share_urls
+
+
 @bp.route("/events/share", methods=["POST"])
 @limiter.limit("20/minute")
 def share_event():
@@ -1348,35 +1396,7 @@ def share_event():
         db.session.commit()
         
         # Generate share URLs based on platform
-        share_urls = {}
-        base_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
-        
-        if platform == "facebook":
-            share_urls["facebook"] = f"https://www.facebook.com/sharer/sharer.php?u={event_url or base_url}"
-        elif platform == "twitter":
-            text = f"Check out this event: {event_title}"
-            if event_venue:
-                text += f" at {event_venue}"
-            share_urls["twitter"] = f"https://twitter.com/intent/tweet?text={text}&url={event_url or base_url}"
-        elif platform == "linkedin":
-            share_urls["linkedin"] = f"https://www.linkedin.com/sharing/share-offsite/?url={event_url or base_url}"
-        elif platform == "whatsapp":
-            text = f"Check out this event: {event_title}"
-            if event_venue:
-                text += f" at {event_venue}"
-            share_urls["whatsapp"] = f"https://wa.me/?text={text}%20{event_url or base_url}"
-        elif platform == "email":
-            subject = f"Event Recommendation: {event_title}"
-            body = f"Hi! I thought you might be interested in this event:\n\n{event_title}"
-            if event_venue:
-                body += f"\nVenue: {event_venue}"
-            if event_city:
-                body += f"\nCity: {event_city}"
-            if event_date:
-                body += f"\nDate: {event_date}"
-            if event_url:
-                body += f"\nMore info: {event_url}"
-            share_urls["email"] = f"mailto:?subject={subject}&body={body}"
+        share_urls = _generate_share_urls(platform, event_title, event_url, event_venue, event_city, event_date)
         
         return jsonify({
             "success": True,
@@ -1624,6 +1644,15 @@ def generate_itinerary():
     except Exception as e:
         return error_response(str(e), 500)
 
+def _get_llm_status_message(is_available, api_key_set):
+    """Get LLM service status message."""
+    if is_available:
+        return "LLM service is ready"
+    if not api_key_set:
+        return "API key not configured"
+    return "OpenAI client initialization failed"
+
+
 @bp.route("/llm/status")
 def llm_status():
     """Check LLM service status with detailed diagnostics"""
@@ -1637,8 +1666,7 @@ def llm_status():
         "api_key_configured": api_key_set,
         "api_key_length": api_key_length if api_key_set else 0,
         "openai_library_installed": True,  # We'll check this in the service
-        "message": "LLM service is ready" if llm_service.is_available() else 
-                   ("API key not configured" if not api_key_set else "OpenAI client initialization failed")
+        "message": _get_llm_status_message(llm_service.is_available(), api_key_set)
     })
 
 # Subscription endpoints
@@ -1962,6 +1990,43 @@ def get_itinerary(itinerary_id):
         return error_response(str(e), 500)
 
 
+def _update_itinerary_basic_fields(itinerary, data):
+    """Update basic text fields of itinerary."""
+    if "title" in data:
+        itinerary.title = data["title"].strip()
+    if "description" in data:
+        itinerary.description = data["description"].strip()
+    if "destination" in data:
+        itinerary.destination = data["destination"].strip()
+    if "budget" in data:
+        itinerary.budget = data["budget"]
+    if "status" in data:
+        itinerary.status = data["status"]
+
+
+def _update_itinerary_dates(itinerary, data):
+    """Update date fields of itinerary with validation."""
+    if "start_date" in data:
+        if data["start_date"]:
+            try:
+                itinerary.start_date = datetime.strptime(data["start_date"], "%Y-%m-%d").date()
+            except ValueError:
+                return error_response("Invalid start_date format. Use YYYY-MM-DD", 400)
+        else:
+            itinerary.start_date = None
+    
+    if "end_date" in data:
+        if data["end_date"]:
+            try:
+                itinerary.end_date = datetime.strptime(data["end_date"], "%Y-%m-%d").date()
+            except ValueError:
+                return error_response("Invalid end_date format. Use YYYY-MM-DD", 400)
+        else:
+            itinerary.end_date = None
+    
+    return None
+
+
 @bp.route("/itineraries/<int:itinerary_id>", methods=["PUT"])
 def update_itinerary(itinerary_id):
     """Update an itinerary"""
@@ -1969,39 +2034,13 @@ def update_itinerary(itinerary_id):
         itinerary = Itinerary.query.get_or_404(itinerary_id)
         data = request.get_json() or {}
         
-        # Update fields if provided
-        if "title" in data:
-            itinerary.title = data["title"].strip()
+        # Update basic fields
+        _update_itinerary_basic_fields(itinerary, data)
         
-        if "description" in data:
-            itinerary.description = data["description"].strip()
-        
-        if "destination" in data:
-            itinerary.destination = data["destination"].strip()
-        
-        if "start_date" in data:
-            if data["start_date"]:
-                try:
-                    itinerary.start_date = datetime.strptime(data["start_date"], "%Y-%m-%d").date()
-                except ValueError:
-                    return error_response("Invalid start_date format. Use YYYY-MM-DD", 400)
-            else:
-                itinerary.start_date = None
-        
-        if "end_date" in data:
-            if data["end_date"]:
-                try:
-                    itinerary.end_date = datetime.strptime(data["end_date"], "%Y-%m-%d").date()
-                except ValueError:
-                    return error_response("Invalid end_date format. Use YYYY-MM-DD", 400)
-            else:
-                itinerary.end_date = None
-        
-        if "budget" in data:
-            itinerary.budget = data["budget"]
-        
-        if "status" in data:
-            itinerary.status = data["status"]
+        # Update dates with validation
+        date_error = _update_itinerary_dates(itinerary, data)
+        if date_error:
+            return date_error
         
         # Validate date range
         if itinerary.start_date and itinerary.end_date and itinerary.start_date > itinerary.end_date:
