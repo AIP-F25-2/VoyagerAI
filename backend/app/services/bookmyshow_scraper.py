@@ -338,7 +338,7 @@ def main():
     ap.add_argument("--limit", type=int, default=100)
     ap.add_argument("--headless", type=int, default=0)
     ap.add_argument("--out", default="events.csv")
-    ap.add_argument("--proxy", default="", help="http://user:pass@host:port")
+    ap.add_argument("--proxy", default="", help="http://user:pass@host:port")  # NOSONAR python:S5332 - Help text example only, not actual insecure code
     ap.add_argument("--serve", action="store_true", help="Serve events.html + events.csv locally")
     ap.add_argument("--open", action="store_true", help="Open browser to served events.html")
     args = ap.parse_args()
