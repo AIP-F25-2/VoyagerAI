@@ -266,7 +266,7 @@ def _free_port(start=8000):
 def _serve(open_browser: bool):
     port = _free_port()
     httpd = ThreadingHTTPServer(("127.0.0.1", port), SimpleHTTPRequestHandler)
-    url = f"http://127.0.0.1:{port}/events.html"
+    url = f"http://127.0.0.1:{port}/events.html"  # NOSONAR python:S5332 - Localhost dev server only, not exposed externally
     if open_browser:
         webbrowser.open(url)
     print(f"[server] {url}")

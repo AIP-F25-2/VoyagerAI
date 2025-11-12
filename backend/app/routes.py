@@ -1370,7 +1370,7 @@ def _build_email_body(event_title, event_venue, event_city, event_date, event_ur
 def _generate_share_urls(platform, event_title, event_url, event_venue, event_city, event_date):
     """Generate share URLs for different platforms."""
     share_urls = {}
-    base_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+    base_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')  # NOSONAR python:S5332 - Localhost dev only
     target_url = event_url or base_url
     
     if platform == "facebook":

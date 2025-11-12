@@ -17,7 +17,7 @@ class ElasticsearchService:
     
     def __init__(self):
         """Initialize Elasticsearch client."""
-        self.es_url = os.getenv("ELASTICSEARCH_URL", "http://localhost:9200")
+        self.es_url = os.getenv("ELASTICSEARCH_URL", "http://localhost:9200")  # NOSONAR python:S5332 - Localhost dev only
         self.index_name = os.getenv("ELASTICSEARCH_INDEX", "voyagerai_events")
         
         # Initialize client
