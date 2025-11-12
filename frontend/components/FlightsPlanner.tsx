@@ -123,7 +123,7 @@ export default function FlightsPlanner() {
                     description: `${flight.airline ? `Airline: ${flight.airline}` : ''}${flight.flight_number ? `, Flight: ${flight.flight_number}` : ''}`,
                     date: flight.departure_date,
                     location: `${flight.origin} to ${flight.destination}`,
-                    price: flight.price ? parseFloat(flight.price.replace(/[^0-9.-]+/g, '')) : undefined,
+                    price: flight.price ? Number.parseFloat(flight.price.replace(/[^0-9.-]+/g, '')) : undefined,
                     url: flight.url
                   }}
                 />

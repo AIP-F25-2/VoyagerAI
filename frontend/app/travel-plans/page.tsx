@@ -110,7 +110,7 @@ export default function ItinerariesPage() {
         date: event.date || '',
         time: '',
         location: event.venue || '',
-        price: event.price ? parseFloat(event.price.replace(/[^0-9.]/g, '')) : 0,
+        price: event.price ? Number.parseFloat(event.price.replace(/[^0-9.]/g, '')) : 0,
         url: event.url || '',
         image_url: '',
         status: 'planned',
@@ -157,13 +157,13 @@ export default function ItinerariesPage() {
       console.log('Itinerary data:', {
         user_id: user.id,
         ...newItinerary,
-        budget: newItinerary.budget ? parseFloat(newItinerary.budget) : null
+        budget: newItinerary.budget ? Number.parseFloat(newItinerary.budget) : null
       })
       
       const data = await apiClient.post('/api/itineraries', {
         user_id: user.id,
         ...newItinerary,
-        budget: newItinerary.budget ? parseFloat(newItinerary.budget) : null
+        budget: newItinerary.budget ? Number.parseFloat(newItinerary.budget) : null
       })
       console.log('Response data:', data)
       

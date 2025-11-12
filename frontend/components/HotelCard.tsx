@@ -54,7 +54,7 @@ export default function HotelCard({ hotel, showAddToItinerary = true }: HotelCar
               description: `Hotel in ${hotel.city} - ${hotel.address}`,
               date: hotel.check_in,
               location: hotel.address,
-              price: hotel.price_per_night ? parseFloat(hotel.price_per_night.replace(/[^0-9.-]+/g, '')) : undefined,
+              price: hotel.price_per_night ? Number.parseFloat(hotel.price_per_night.replace(/[^0-9.-]+/g, '')) : undefined,
               url: hotel.url
             }}
           />

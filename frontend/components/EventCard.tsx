@@ -67,7 +67,7 @@ export default function EventCard({ event }: Props) {
             date: event.date,
             time: event.time,
             location: event.venue || event.place,
-            price: event.price ? parseFloat(event.price.replace(/[^0-9.-]+/g, '')) : undefined,
+            price: event.price ? Number.parseFloat(event.price.replace(/[^0-9.-]+/g, '')) : undefined,
             url: event.url
           }}
         />

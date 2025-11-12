@@ -147,7 +147,7 @@ export default function ItineraryDetailPage() {
         date: itinerary?.start_date || '',
         time: '15:00', // Default check-in time
         location: hotel.address || hotel.location || '',
-        price: hotel.price_per_night ? parseFloat(hotel.price_per_night.replace(/[^0-9.]/g, '')) : null,
+        price: hotel.price_per_night ? Number.parseFloat(hotel.price_per_night.replace(/[^0-9.]/g, '')) : null,
         url: hotel.url || '',
         image_url: '',
         status: 'planned',
@@ -178,7 +178,7 @@ export default function ItineraryDetailPage() {
         date: event.date || '',
         time: '',
         location: event.venue || '',
-        price: event.price ? parseFloat(event.price.replace(/[^0-9.]/g, '')) : 0,
+        price: event.price ? Number.parseFloat(event.price.replace(/[^0-9.]/g, '')) : 0,
         url: event.url || '',
         image_url: '',
         status: 'planned',
@@ -205,7 +205,7 @@ export default function ItineraryDetailPage() {
     try {
       const data = await apiClient.post(`/api/itineraries/${itineraryId}/items`, {
         ...newItem,
-        price: newItem.price ? parseFloat(newItem.price) : null,
+        price: newItem.price ? Number.parseFloat(newItem.price) : null,
         order_index: itinerary?.items?.length || 0
       })
       if (data.success) {
@@ -255,7 +255,7 @@ export default function ItineraryDetailPage() {
   }
 
   const handleBudgetPreset = (amount: number) => {
-    const current = parseFloat(newBudget) || 0
+    const current = Number.parseFloat(newBudget) || 0
     setNewBudget(Math.max(0, current + amount).toFixed(2))
   }
 
@@ -269,7 +269,7 @@ export default function ItineraryDetailPage() {
 
     try {
       const data = await apiClient.put(`/api/itineraries/${itineraryId}`, {
-        budget: parseFloat(parseFloat(sanitized).toFixed(2))
+        budget: Number.parseFloat(Number.parseFloat(sanitized).toFixed(2))
       })
       if (data.success) {
         // After updating, refetch the itinerary to avoid any stale merges
@@ -382,7 +382,7 @@ export default function ItineraryDetailPage() {
           const hotelUrl = hotelData.url || ''
           const hotelAddress = hotelData.address || hotelData.location || ''
           const hotelPrice = hotelData.price_per_night ? 
-            parseFloat(String(hotelData.price_per_night).replace(/[^0-9.-]/g, '')) : null
+            Number.parseFloat(String(hotelData.price_per_night).replace(/[^0-9.-]/g, '')) : null
 
           try {
             await apiClient.post(`/api/itineraries/${itineraryId}/items`, {
