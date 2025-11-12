@@ -1031,7 +1031,8 @@ def flights_search():
 
 
 # Favorites
-@bp.route("/favorites", methods=["GET"]) 
+@bp.route("/favorites", methods=["GET"])
+@limiter.limit("60/minute")  # Rate limit to prevent DoS
 def list_favorites():
     email = request.args.get("email", "").strip() or None
     q = Favorite.query
@@ -1150,6 +1151,7 @@ def export_event_ics(event_id: int):
         return error_response(str(e), 500)
 
 @bp.route("/events/filters")
+@limiter.limit("60/minute")  # Rate limit to prevent DoS
 def get_filter_options():
     """Get available filter options for events"""
     try:
@@ -1299,6 +1301,7 @@ def share_event():
 
 # Event Reviews endpoints
 @bp.route("/events/reviews", methods=["GET"])
+@limiter.limit("60/minute")  # Rate limit to prevent DoS
 def get_event_reviews():
     """Get reviews for a specific event"""
     try:
@@ -1406,6 +1409,7 @@ def add_event_review():
 
 # Recommendations endpoints
 @bp.route("/events/recommendations")
+@limiter.limit("30/minute")  # Rate limit to prevent DoS
 def get_recommendations():
     """Get personalized event recommendations for a user"""
     try:
@@ -1427,6 +1431,7 @@ def get_recommendations():
         return error_response(str(e), 500)
 
 @bp.route("/events/trending")
+@limiter.limit("30/minute")  # Rate limit to prevent DoS
 def get_trending_events():
     """Get trending events based on recent activity"""
     try:
@@ -1762,6 +1767,7 @@ def send_daily_digest():
 
 # Itinerary endpoints
 @bp.route("/itineraries", methods=["GET"])
+@limiter.limit("60/minute")  # Rate limit to prevent DoS
 def get_itineraries():
     """Get user's itineraries"""
     try:
@@ -2123,6 +2129,7 @@ def reorder_itinerary_items(itinerary_id):
         return error_response(str(e), 500)
 # Elasticsearch management routes
 @bp.route("/elasticsearch/status")
+@limiter.limit("30/minute")  # Rate limit to prevent DoS
 def elasticsearch_status():
     """Get Elasticsearch connection and index status."""
     try:
