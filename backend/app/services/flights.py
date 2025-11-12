@@ -2,7 +2,7 @@ import os
 from typing import List, Dict, Any, Optional
 
 
-def search_flights(origin: str, destination: str, departure_date: str, return_date: Optional[str] = None, adults: int = 1, limit: int = 10) -> List[Dict[str, Any]]:
+def search_flights(origin: str, destination: str, departure_date: str, return_date: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
     """Stub provider for flights search.
 
     If FLIGHT_API_KEY is set, this function can be extended to call a real provider

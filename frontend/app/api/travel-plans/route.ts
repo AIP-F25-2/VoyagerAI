@@ -13,8 +13,9 @@ export async function GET(req: Request) {
     const res = await fetch(`${API_BASE_URL}/api/itineraries?user_id=${user_id}`);
     const data = await res.json();
     return NextResponse.json(data);
-  } catch (error) {
-    return NextResponse.json({ success: false, error: "Failed to fetch travel plans" }, { status: 500 });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to fetch travel plans";
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }
 
@@ -30,7 +31,8 @@ export async function POST(req: Request) {
     });
     const data = await res.json();
     return NextResponse.json(data);
-  } catch (error) {
-    return NextResponse.json({ success: false, error: "Failed to create travel plan" }, { status: 500 });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to create travel plan";
+    return NextResponse.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }

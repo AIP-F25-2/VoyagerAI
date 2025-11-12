@@ -910,7 +910,7 @@ def get_hotel_cities():
         
         return jsonify({
             "success": True,
-            "cities": sorted(list(cities))
+            "cities": sorted(cities)
         })
     except Exception as e:
         return error_response(str(e), 500)
@@ -2159,7 +2159,8 @@ def _extract_itinerary_item_data(data):
 def add_itinerary_item(itinerary_id):
     """Add an item to an itinerary"""
     try:
-        itinerary = Itinerary.query.get_or_404(itinerary_id)
+        # Validate itinerary exists (get_or_404 will raise 404 if not found)
+        _ = Itinerary.query.get_or_404(itinerary_id)
         data = request.get_json() or {}
         
         # Extract and validate data
@@ -2298,7 +2299,8 @@ def delete_itinerary_item(itinerary_id, item_id):
 def reorder_itinerary_items(itinerary_id):
     """Reorder items in an itinerary"""
     try:
-        itinerary = Itinerary.query.get_or_404(itinerary_id)
+        # Validate itinerary exists (get_or_404 will raise 404 if not found)
+        _ = Itinerary.query.get_or_404(itinerary_id)
         data = request.get_json() or {}
         
         item_orders = data.get("item_orders", [])  # List of {id: item_id, order_index: new_index}

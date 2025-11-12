@@ -444,7 +444,7 @@ def _scrape_bms_events_from_links(page, links):
             rows.append(data)
             print(f"  -> Success: {data.get('title', 'No title')}")
         else:
-            print(f"  -> Failed to extract data")
+            print("  -> Failed to extract data")
         
         time.sleep(1 + random.uniform(0.1, 0.5))
     

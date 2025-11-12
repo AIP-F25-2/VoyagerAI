@@ -100,7 +100,7 @@ class RecommendationService:
             if any(keyword in title_lower for keyword in keywords):
                 return category
         
-        return None
+        return "other"  # Return a default category instead of None
     
     def _get_recommendations_by_preferences(self, preferences: Dict[str, Any], limit: int) -> List[Dict[str, Any]]:
         """Get event recommendations based on user preferences"""
