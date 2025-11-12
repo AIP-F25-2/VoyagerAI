@@ -65,7 +65,7 @@ class User(db.Model):
         payload = {
             'user_id': self.id,
             'email': self.email,
-            'exp': datetime.utcnow() + timedelta(days=7)  # Token expires in 7 days
+            'exp': datetime.datetime.utcnow() + timedelta(days=7)  # Token expires in 7 days
         }
         return jwt.encode(payload, secret_key, algorithm='HS256')
 
@@ -75,7 +75,7 @@ class User(db.Model):
         try:
             secret_key = os.getenv('JWT_SECRET_KEY')
             if not secret_key:
-                raise ValueError("JWT_SECRET_KEY environment variable is required")
+                raise ValueError("JWT_SECRET_KEY environment variable is required...")
             
             payload = jwt.decode(token, secret_key, algorithms=['HS256'])
             user_id = payload['user_id']
@@ -89,13 +89,13 @@ class User(db.Model):
         """Generate email verification token"""
         secret_key = os.getenv('JWT_SECRET_KEY')
         if not secret_key:
-            raise ValueError("JWT_SECRET_KEY environment variable is required")
+            raise ValueError("JWT_SECRET_KEY environment variable is required...")
         
         payload = {
             'user_id': self.id,
             'email': self.email,
             'type': 'email_verification',
-            'exp': datetime.utcnow() + timedelta(hours=24)  # 24 hour expiry
+            'exp': datetime.datetime.utcnow() + timedelta(hours=24)  # 24 hour expiry
         }
         token = jwt.encode(payload, secret_key, algorithm='HS256')
         self.email_verification_token = token
@@ -111,11 +111,11 @@ class User(db.Model):
             'user_id': self.id,
             'email': self.email,
             'type': 'password_reset',
-            'exp': datetime.utcnow() + timedelta(hours=1)  # 1 hour expiry
+            'exp': datetime.datetime.utcnow() + timedelta(hours=1)  # 1 hour expiry
         }
         token = jwt.encode(payload, secret_key, algorithm='HS256')
         self.password_reset_token = token
-        self.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
+        self.password_reset_expires = datetime.datetime.utcnow() + timedelta(hours=1)
         return token
 
     @staticmethod
@@ -453,7 +453,7 @@ class Subscription(db.Model):
         """Check if subscription is currently active"""
         if self.status != 'active':
             return False
-        if self.end_date and self.end_date < datetime.utcnow():
+        if self.end_date and self.end_date < datetime.datetime.utcnow():
             return False
         return True
     
