@@ -58,19 +58,25 @@ class User(db.Model):
 
     def generate_token(self):
         """Generate JWT token for the user"""
+        secret_key = os.getenv('JWT_SECRET_KEY')
+        if not secret_key:
+            raise ValueError("JWT_SECRET_KEY environment variable is required. Please set it in your .env file.")
+        
         payload = {
             'user_id': self.id,
             'email': self.email,
             'exp': datetime.utcnow() + timedelta(days=7)  # Token expires in 7 days
         }
-        secret_key = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
         return jwt.encode(payload, secret_key, algorithm='HS256')
 
     @staticmethod
     def verify_token(token):
         """Verify JWT token and return user"""
         try:
-            secret_key = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
+            secret_key = os.getenv('JWT_SECRET_KEY')
+            if not secret_key:
+                raise ValueError("JWT_SECRET_KEY environment variable is required")
+            
             payload = jwt.decode(token, secret_key, algorithms=['HS256'])
             user_id = payload['user_id']
             return User.query.get(user_id)
@@ -81,26 +87,32 @@ class User(db.Model):
 
     def generate_verification_token(self):
         """Generate email verification token"""
+        secret_key = os.getenv('JWT_SECRET_KEY')
+        if not secret_key:
+            raise ValueError("JWT_SECRET_KEY environment variable is required")
+        
         payload = {
             'user_id': self.id,
             'email': self.email,
             'type': 'email_verification',
             'exp': datetime.utcnow() + timedelta(hours=24)  # 24 hour expiry
         }
-        secret_key = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
         token = jwt.encode(payload, secret_key, algorithm='HS256')
         self.email_verification_token = token
         return token
 
     def generate_password_reset_token(self):
         """Generate password reset token"""
+        secret_key = os.getenv('JWT_SECRET_KEY')
+        if not secret_key:
+            raise ValueError("JWT_SECRET_KEY environment variable is required")
+        
         payload = {
             'user_id': self.id,
             'email': self.email,
             'type': 'password_reset',
             'exp': datetime.utcnow() + timedelta(hours=1)  # 1 hour expiry
         }
-        secret_key = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
         token = jwt.encode(payload, secret_key, algorithm='HS256')
         self.password_reset_token = token
         self.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
@@ -110,7 +122,10 @@ class User(db.Model):
     def verify_token(token, token_type=None):
         """Verify JWT token and return user"""
         try:
-            secret_key = os.getenv('JWT_SECRET_KEY', 'your-secret-key-change-in-production')
+            secret_key = os.getenv('JWT_SECRET_KEY')
+            if not secret_key:
+                raise ValueError("JWT_SECRET_KEY environment variable is required")
+            
             payload = jwt.decode(token, secret_key, algorithms=['HS256'])
             
             # If token_type is specified, check it matches

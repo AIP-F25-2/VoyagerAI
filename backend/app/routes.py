@@ -16,6 +16,7 @@ from .services.ticketmaster import fetch_events as fetch_ticketmaster
 from .services.eventbrite import fetch_events as fetch_eventbrite
 from .services.csv_loader import csv_loader
 from .services.images import search_pixabay_image
+from .services.elasticsearch_service import es_service
 from datetime import datetime, date, timedelta
 from io import StringIO
 import os
@@ -171,10 +172,13 @@ def get_events():
             
             if ticketmaster_data and '_embedded' in ticketmaster_data:
                 raw_events = ticketmaster_data['_embedded']['events']
-                # Ensure each event has a unique ID
+                # Ensure each event has a unique ID and source
                 for i, event in enumerate(raw_events):
                     if 'id' not in event or not event['id']:
                         event['id'] = f"tm_{i}_{hash(event.get('name', ''))}"
+                    # Set source for Elasticsearch indexing
+                    if 'source' not in event:
+                        event['source'] = 'ticketmaster'
                 ticketmaster_events = raw_events
                 print(f"✅ Ticketmaster: Found {len(ticketmaster_events)} real events")
             else:
@@ -222,7 +226,8 @@ def get_events():
                             "city": {"name": event.city or "Unknown"}
                         }]
                     },
-                    "priceRanges": [{"min": 0, "max": 100}] if event.price else None
+                    "priceRanges": [{"min": 0, "max": 100}] if event.price else None,
+                    "source": "eventbrite"  # Set source for Elasticsearch indexing
                 }
                 eventbrite_events.append(formatted_event)
             
@@ -311,6 +316,89 @@ def get_events():
         eventbrite_events = apply_date_filters(eventbrite_events)
         csv_events = apply_date_filters(csv_events)
 
+        # Index events in Elasticsearch (if available) for future searches
+        if es_service.is_available():
+            try:
+                all_events_to_index = ticketmaster_events + eventbrite_events + csv_events
+                indexed_count = es_service.bulk_index_events(all_events_to_index)
+                if indexed_count > 0:
+                    print(f"📇 Indexed {indexed_count} events in Elasticsearch")
+            except Exception as e:
+                print(f"⚠️  Failed to index events in Elasticsearch: {e}")
+
+        # Try Elasticsearch search if available and we have filters/query
+        use_elasticsearch = (
+            es_service.is_available() and 
+            (query_param or city or date_from or date_to or price_min or price_max or category)
+        )
+        
+        if use_elasticsearch:
+            try:
+                # Convert price strings to floats
+                price_min_float = float(price_min) if price_min else None
+                price_max_float = float(price_max) if price_max else None
+                
+                # Map provider to source
+                source_filter = None
+                if provider in {"ticketmaster", "tm"}:
+                    source_filter = "ticketmaster"
+                elif provider in {"eventbrite", "eb"}:
+                    source_filter = "eventbrite"
+                elif provider == "csv":
+                    source_filter = "csv"
+                
+                # Search with Elasticsearch
+                es_results = es_service.search_events(
+                    query=query_param if query_param else None,
+                    city=city if city else None,
+                    category=category if category else None,
+                    date_from=date_from if date_from else None,
+                    date_to=date_to if date_to else None,
+                    price_min=price_min_float,
+                    price_max=price_max_float,
+                    source=source_filter,
+                    sort="date_asc",  # Default sort
+                    page=page,
+                    page_size=page_size
+                )
+                
+                if es_results["total"] > 0:
+                    print(f"🔍 Elasticsearch found {es_results['total']} events")
+                    # Group results by source for frontend compatibility
+                    es_events = es_results["events"]
+                    es_ticketmaster = [e for e in es_events if e.get("source") == "ticketmaster"]
+                    es_eventbrite = [e for e in es_events if e.get("source") == "eventbrite"]
+                    es_csv = [e for e in es_events if e.get("source") == "csv"]
+                    
+                    # If source filtering was applied, only return that source
+                    if source_filter:
+                        if source_filter == "ticketmaster":
+                            es_eventbrite, es_csv = [], []
+                        elif source_filter == "eventbrite":
+                            es_ticketmaster, es_csv = [], []
+                        elif source_filter == "csv":
+                            es_ticketmaster, es_eventbrite = [], []
+                    
+                    return jsonify({
+                        "ticketmaster": es_ticketmaster,
+                        "eventbrite": es_eventbrite,
+                        "csv_events": es_csv,
+                        "merged": es_events,
+                        "pagination": {
+                            "page": es_results["page"],
+                            "page_size": es_results["page_size"],
+                            "total": es_results["total"]
+                        },
+                        "source": "elasticsearch"
+                    })
+                else:
+                    print("⚠️  Elasticsearch returned no results, using fallback")
+            except Exception as e:
+                print(f"⚠️  Elasticsearch search failed: {e}, using fallback")
+                import traceback
+                traceback.print_exc()
+
+        # Fallback to current method (or use when no filters)
         # Pagination per merged result for client convenience
         merged = ticketmaster_events + eventbrite_events + csv_events
         total = len(merged)
@@ -323,7 +411,8 @@ def get_events():
             "eventbrite": eventbrite_events,
             "csv_events": csv_events,
             "merged": merged_page,
-            "pagination": {"page": page, "page_size": page_size, "total": total}
+            "pagination": {"page": page, "page_size": page_size, "total": total},
+            "source": "fallback"
         })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -1994,4 +2083,68 @@ def reorder_itinerary_items(itinerary_id):
         
     except Exception as e:
         db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+# Elasticsearch management routes
+@bp.route("/elasticsearch/status")
+def elasticsearch_status():
+    """Get Elasticsearch connection and index status."""
+    try:
+        stats = es_service.get_index_stats()
+        return jsonify({
+            "success": True,
+            "elasticsearch": stats
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@bp.route("/elasticsearch/index", methods=["POST"])
+def index_all_events():
+    """Index all events from database and CSV into Elasticsearch."""
+    if not es_service.is_available():
+        return jsonify({
+            "success": False,
+            "error": "Elasticsearch is not available"
+        }), 503
+    
+    try:
+        # Get all events from database
+        db_events = Event.query.all()
+        indexed_count = 0
+        
+        # Format and index database events
+        for event in db_events:
+            formatted_event = {
+                "id": f"eb_{event.id}",
+                "name": event.title,
+                "url": event.url,
+                "dates": {
+                    "start": {
+                        "localDate": event.date.isoformat() if event.date else "2024-01-01",
+                        "localTime": event.time.strftime("%H:%M") if event.time else "19:00"
+                    }
+                },
+                "images": [{"url": "/placeholder.jpg"}],
+                "_embedded": {
+                    "venues": [{
+                        "name": event.venue or "TBA",
+                        "city": {"name": event.city or "Unknown"}
+                    }]
+                },
+                "priceRanges": [{"min": 0, "max": 100}] if event.price else None,
+                "source": "eventbrite"
+            }
+            if es_service.index_event(formatted_event):
+                indexed_count += 1
+        
+        # Get CSV events
+        csv_events = csv_loader.load_all_csv_events()
+        csv_indexed = es_service.bulk_index_events(csv_events)
+        indexed_count += csv_indexed
+        
+        return jsonify({
+            "success": True,
+            "message": f"Indexed {indexed_count} events",
+            "indexed_count": indexed_count
+        })
+    except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

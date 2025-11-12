@@ -167,14 +167,39 @@ class CSVEventLoader:
     def get_events_by_city(self, city: str) -> List[Dict[str, Any]]:
         """Get events filtered by city."""
         all_events = self.load_all_csv_events()
+        print(f"📊 CSV Loader: Loaded {len(all_events)} total events from CSV files")
+        
         if not city:
             return all_events
         
-        city_lower = city.lower()
-        return [
-            event for event in all_events
-            if city_lower in event["_embedded"]["venues"][0]["city"]["name"].lower()
-        ]
+        city_lower = city.lower().strip()
+        filtered = []
+        for event in all_events:
+            # Check if event has venue city info
+            venue_city = None
+            if event.get("_embedded") and event["_embedded"].get("venues"):
+                venues = event["_embedded"]["venues"]
+                if venues and len(venues) > 0:
+                    venue_city = venues[0].get("city", {}).get("name", "")
+            
+            # Also check event name and description for city
+            event_name = (event.get("name") or "").lower()
+            event_desc = (event.get("description") or "").lower()
+            
+            # Match city (exact or partial) in city field, name, or description
+            matches = False
+            if venue_city:
+                venue_city_lower = venue_city.lower().strip()
+                if city_lower == venue_city_lower or city_lower in venue_city_lower:
+                    matches = True
+            elif city_lower in event_name or city_lower in event_desc:
+                matches = True
+            
+            if matches:
+                filtered.append(event)
+        
+        print(f"🔍 CSV Loader: Filtered by city '{city}': {len(filtered)} events matched out of {len(all_events)}")
+        return filtered
     
     def get_events_by_query(self, query: str) -> List[Dict[str, Any]]:
         """Get events filtered by search query."""

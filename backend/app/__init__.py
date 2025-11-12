@@ -23,6 +23,15 @@ cache = Cache()
 def create_app():
     app = Flask(__name__)
 
+    # Validate required environment variables
+    required_vars = ['JWT_SECRET_KEY']
+    missing_vars = [var for var in required_vars if not os.getenv(var)]
+    if missing_vars:
+        raise ValueError(
+            f"Missing required environment variables: {', '.join(missing_vars)}\n"
+            f"Please set these in your .env file. See env.example for reference."
+        )
+
     # Sentry (optional)
     sentry_dsn = os.getenv("SENTRY_DSN", "").strip()
     if sentry_dsn:
@@ -51,6 +60,23 @@ def create_app():
     # Ensure models are registered
     from . import models  # noqa: F401
 
+    # Register error handlers
+    from .utils.error_handler import register_error_handlers
+    register_error_handlers(app)
+
+    # Initialize Elasticsearch (optional, won't fail if unavailable)
+    with app.app_context():
+        try:
+            from .services.elasticsearch_service import es_service
+            if es_service.is_available():
+                es_service.create_index()
+                print("✅ Elasticsearch initialized and index created")
+            else:
+                print("⚠️  Elasticsearch not available, using fallback search")
+        except Exception as e:
+            print(f"⚠️  Elasticsearch initialization failed: {e}")
+            print("   Events will still work with fallback search")
+
     # Register blueprints
     from .routes import bp as api_bp
     from .auth import auth_bp
@@ -72,11 +98,20 @@ def create_app():
             from .models import Event
             event_count = Event.query.count()
             
+            # Check Elasticsearch status
+            es_status = {"available": False}
+            try:
+                from .services.elasticsearch_service import es_service
+                es_status = es_service.get_index_stats()
+            except:
+                pass
+            
             return {
                 "status": "healthy",
                 "timestamp": datetime.utcnow().isoformat(),
                 "database": "connected",
                 "event_count": event_count,
+                "elasticsearch": es_status,
                 "version": "1.0.0"
             }, 200
         except Exception as e:
