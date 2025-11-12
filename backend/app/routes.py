@@ -102,7 +102,8 @@ def _fetch_eventbrite_events(city, query_param, date_from, date_to, limit):
             if date_to:
                 dt_ = datetime.strptime(date_to, "%Y-%m-%d").date()
                 db_query = db_query.filter(Event.date <= dt_)
-        except Exception:
+        except (ValueError, TypeError):
+            # Invalid date format, skip date filtering
             pass
 
         events = db_query.order_by(Event.created_at.desc()).limit(limit).all()
@@ -200,7 +201,8 @@ def _apply_date_filters(ev_list, date_from, date_to):
                 if dval > dt_:
                     continue
             filtered.append(ev)
-        except Exception:
+        except (ValueError, TypeError):
+            # Invalid date format, skip this event
             continue
     return filtered
 
@@ -288,6 +290,88 @@ def _search_with_elasticsearch(query_param, city, category, date_from, date_to,
     return None
 
 
+def _check_event_exists(title, url, date_str=None):
+    """Check if an event already exists in the database."""
+    if url:
+        existing = Event.query.filter_by(url=url).first()
+        if existing:
+            return existing
+    
+    if not title:
+        return None
+    
+    try:
+        if date_str:
+            event_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            existing = (
+                Event.query
+                .filter(Event.title == title)
+                .filter(Event.date == event_date)
+                .first()
+            )
+            if existing:
+                return existing
+    except (ValueError, TypeError):
+        pass
+    
+    return Event.query.filter(Event.title == title).first()
+
+
+def _parse_event_fields(ev):
+    """Parse and extract event fields from CSV event data."""
+    title = ev.get("name") or ""
+    url = ev.get("url") or None
+    
+    # Extract date and time
+    dates = ev.get("dates", {}) or {}
+    start = dates.get("start", {}) or {}
+    local_date = start.get("localDate")
+    local_time = start.get("localTime")
+    
+    # Extract venue and city
+    embedded = ev.get("_embedded", {}) or {}
+    venues = embedded.get("venues", [{}])
+    venue = venues[0].get("name") if venues else None
+    city = venues[0].get("city", {}).get("name") if venues else None
+    
+    # Parse dates
+    parsed_date = None
+    if local_date:
+        try:
+            parsed_date = datetime.strptime(local_date, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            pass
+    
+    parsed_time = None
+    if local_time:
+        try:
+            parsed_time = datetime.strptime(local_time, "%H:%M").time()
+        except (ValueError, TypeError):
+            pass
+    
+    # Parse price
+    price_text = None
+    try:
+        pr = ev.get("priceRanges")
+        if isinstance(pr, list) and pr:
+            mn = pr[0].get("min")
+            mx = pr[0].get("max")
+            if mn is not None and mx is not None:
+                price_text = f"{mn}-{mx}"
+    except (KeyError, IndexError, TypeError, AttributeError):
+        pass
+    
+    return {
+        "title": title,
+        "url": url,
+        "date": parsed_date,
+        "time": parsed_time,
+        "venue": venue,
+        "city": city,
+        "price": price_text
+    }
+
+
 def _save_csv_events_to_db(csv_events):
     """Persist CSV-derived events into the SQL database if not already present."""
     saved_count = 0
@@ -295,77 +379,36 @@ def _save_csv_events_to_db(csv_events):
         for ev in csv_events:
             title = ev.get("name") or ""
             url = ev.get("url") or None
-
-            # Skip if we already have this event (match by URL if available, otherwise by title+date)
-            existing = None
-            if url:
-                existing = Event.query.filter_by(url=url).first()
-            if not existing and title:
-                try:
-                    date_str = ev.get("dates", {}).get("start", {}).get("localDate")
-                    if date_str:
-                        existing = (
-                            Event.query
-                            .filter(Event.title == title)
-                            .filter(Event.date == datetime.strptime(date_str, "%Y-%m-%d").date())
-                            .first()
-                        )
-                    else:
-                        existing = Event.query.filter(Event.title == title).first()
-                except Exception:
-                    existing = None
-            if existing:
+            date_str = (ev.get("dates", {}) or {}).get("start", {}).get("localDate")
+            
+            # Check if event already exists
+            if _check_event_exists(title, url, date_str):
                 continue
-
-            # Map fields
-            local_date = (ev.get("dates", {}) or {}).get("start", {}).get("localDate")
-            local_time = (ev.get("dates", {}) or {}).get("start", {}).get("localTime")
-            venue = (ev.get("_embedded", {}) or {}).get("venues", [{}])[0].get("name")
-            city = (ev.get("_embedded", {}) or {}).get("venues", [{}])[0].get("city", {}).get("name")
-
-            parsed_date = None
-            parsed_time = None
-            try:
-                if local_date:
-                    parsed_date = datetime.strptime(local_date, "%Y-%m-%d").date()
-            except Exception:
-                parsed_date = None
-            try:
-                if local_time:
-                    parsed_time = datetime.strptime(local_time, "%H:%M").time()
-            except Exception:
-                parsed_time = None
-
-            price_text = None
-            try:
-                pr = ev.get("priceRanges")
-                if isinstance(pr, list) and pr:
-                    mn = pr[0].get("min")
-                    mx = pr[0].get("max")
-                    if mn is not None and mx is not None:
-                        price_text = f"{mn}-{mx}"
-            except Exception:
-                price_text = None
-
+            
+            # Parse event fields
+            fields = _parse_event_fields(ev)
+            
+            # Create and save event
             event_row = Event(
-                title=title,
-                date=parsed_date,
-                time=parsed_time,
-                venue=venue,
-                place=city,
-                price=price_text,
-                url=url,
-                city=city,
+                title=fields["title"],
+                date=fields["date"],
+                time=fields["time"],
+                venue=fields["venue"],
+                place=fields["city"],
+                price=fields["price"],
+                url=fields["url"],
+                city=fields["city"],
             )
-
+            
             db.session.add(event_row)
             saved_count += 1
 
         if saved_count:
             db.session.commit()
         return saved_count
-    except Exception:
+    except (ValueError, TypeError, AttributeError) as e:
         db.session.rollback()
+        print(f"Error saving CSV events to DB: {e}")
         return 0
 
 @bp.route("/")
@@ -1069,7 +1112,7 @@ def add_favorite():
                 if data.get("date"):
                     date_val = datetime.fromisoformat(data["date"]).date()
                     existing_q = existing_q.filter(Favorite.date == date_val)
-            except Exception:
+            except (ValueError, TypeError):
                 # If date can't be parsed, rely on title-only match
                 pass
             if provider:
@@ -1092,12 +1135,12 @@ def add_favorite():
         try:
             if data.get("date"):
                 fav.date = datetime.fromisoformat(data["date"]).date()
-        except Exception:
+        except (ValueError, TypeError):
             pass
         try:
             if data.get("time"):
                 fav.time = datetime.strptime(data["time"], "%H:%M").time()
-        except Exception:
+        except (ValueError, TypeError):
             pass
 
         db.session.add(fav)
@@ -1242,7 +1285,7 @@ def share_event():
         if event_date:
             try:
                 parsed_date = datetime.fromisoformat(event_date).date()
-            except Exception:
+            except (ValueError, TypeError):
                 pass
         
         # Create share record
@@ -1364,7 +1407,7 @@ def add_event_review():
         if event_date:
             try:
                 parsed_date = datetime.fromisoformat(event_date).date()
-            except Exception:
+            except (ValueError, TypeError):
                 pass
         
         # Check if user already reviewed this event
