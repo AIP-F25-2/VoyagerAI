@@ -9,7 +9,7 @@ start_backend() {
     cd "$(dirname "$0")/backend"
     
     # Check if virtual environment exists
-    if [ ! -d "venv" ]; then
+    if [[ ! -d "venv" ]]; then
         echo "📦 Creating virtual environment..."
         python3 -m venv venv
     fi
@@ -38,7 +38,7 @@ start_frontend() {
     cd "$(dirname "$0")/frontend"
     
     # Install dependencies if needed
-    if [ ! -d "node_modules" ]; then
+    if [[ ! -d "node_modules" ]]; then
         echo "📦 Installing frontend dependencies..."
         npm install > /dev/null 2>&1
     fi
@@ -53,11 +53,11 @@ start_frontend() {
 cleanup() {
     echo ""
     echo "🛑 Shutting down services..."
-    if [ ! -z "$BACKEND_PID" ]; then
+    if [[ ! -z "$BACKEND_PID" ]]; then
         kill $BACKEND_PID 2>/dev/null
         echo "✅ Backend stopped"
     fi
-    if [ ! -z "$FRONTEND_PID" ]; then
+    if [[ ! -z "$FRONTEND_PID" ]]; then
         kill $FRONTEND_PID 2>/dev/null
         echo "✅ Frontend stopped"
     fi
