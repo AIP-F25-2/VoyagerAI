@@ -6,6 +6,13 @@ interface Props {
   event: EventItem;
 }
 
+const formatEventDescription = (venue: string | null, place: string | null): string => {
+  const parts: string[] = []
+  if (venue) parts.push(`Venue: ${venue}`)
+  if (place) parts.push(`Place: ${place}`)
+  return parts.join(', ')
+}
+
 export default function EventCard({ event }: Props) {
   return (
     <div className={styles.card}>

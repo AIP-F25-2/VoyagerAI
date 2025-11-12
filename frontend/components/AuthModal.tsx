@@ -10,6 +10,11 @@ interface AuthModalProps {
   onModeChange: (mode: 'login' | 'signup') => void;
 }
 
+const getButtonText = (isLoading: boolean, mode: string): string => {
+  if (isLoading) return 'Loading...'
+  return mode === 'login' ? 'Sign In' : 'Sign Up'
+}
+
 export default function AuthModal({ isOpen, onClose, mode, onModeChange }: AuthModalProps) {
   const { login, signup } = useAuth();
   const [formData, setFormData] = useState({
