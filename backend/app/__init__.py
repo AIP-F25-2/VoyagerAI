@@ -103,12 +103,12 @@ def create_app():
             try:
                 from .services.elasticsearch_service import es_service
                 es_status = es_service.get_index_stats()
-            except:
+            except Exception:
                 pass
             
             return {
                 "status": "healthy",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.datetime.utcnow().isoformat(),
                 "database": "connected",
                 "event_count": event_count,
                 "elasticsearch": es_status,
@@ -117,7 +117,7 @@ def create_app():
         except Exception as e:
             return {
                 "status": "unhealthy",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.datetime.utcnow().isoformat(),
                 "error": str(e)
             }, 500
 

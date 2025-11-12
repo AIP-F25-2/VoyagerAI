@@ -50,7 +50,7 @@ def signup():
         data = request.get_json()
         
         if not data:
-            return jsonify({"success": False, "message": "No data provided"}), 400
+            return jsonify({"success": False, "message": "No data provided..."}), 400
         
         name = data.get("name", "").strip()
         email = data.get("email", "").strip().lower()
@@ -58,16 +58,16 @@ def signup():
         
         # Validation
         if not name:
-            return jsonify({"success": False, "message": "Name is required"}), 400
+            return jsonify({"success": False, "message": "Name is required..."}), 400
         
         if not email:
-            return jsonify({"success": False, "message": "Email is required"}), 400
+            return jsonify({"success": False, "message": "Email is required..."}), 400
         
         if not validate_email(email):
-            return jsonify({"success": False, "message": "Invalid email format"}), 400
+            return jsonify({"success": False, "message": "Invalid email format..."}), 400
         
         if not password:
-            return jsonify({"success": False, "message": "Password is required"}), 400
+            return jsonify({"success": False, "message": "Password is required..."}), 400
         
         is_valid, message = validate_password(password)
         if not is_valid:
@@ -396,7 +396,7 @@ def reset_password():
             return jsonify({"success": False, "message": "Invalid or expired reset token"}), 400
         
         # Check if reset token is still valid
-        if user.password_reset_expires and user.password_reset_expires < datetime.utcnow():
+        if user.password_reset_expires and user.password_reset_expires < datetime.datetime.utcnow():
             return jsonify({"success": False, "message": "Reset token has expired"}), 400
         
         # Update password and clear reset token

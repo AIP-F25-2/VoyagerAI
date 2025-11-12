@@ -123,8 +123,6 @@ def get_events():
         price_max = request.args.get("price_max", "").strip()
         when = request.args.get("when", "").strip().lower()  # tonight|weekend|this_week|this_month
         category = request.args.get("category", "").strip().lower()  # music|sports|arts|food|tech|business
-        venue = request.args.get("venue", "").strip()
-        accessibility = request.args.get("accessibility", "").strip().lower()  # wheelchair|hearing|visual
         page = max(1, int(request.args.get("page", 1)))
         page_size = max(1, min(1000, int(request.args.get("page_size", limit))))  # Increased from 100 to 1000
 
@@ -161,7 +159,7 @@ def get_events():
             
             # Use query_param or city for Ticketmaster search
             search_term = query_param or city or "Toronto"
-            today = datetime.utcnow().strftime("%Y-%m-%dT00:00:00Z")
+            today = datetime.datetime.utcnow().strftime("%Y-%m-%dT00:00:00Z")
             
             ticketmaster_data = fetch_ticketmaster(
                 query=search_term,
@@ -626,7 +624,7 @@ def fetch_provider_events():
     city = request.args.get("city", "").strip()
     size = int(request.args.get("size", "12"))
 
-    today = datetime.utcnow().strftime("%Y-%m-%dT00:00:00Z")
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%dT00:00:00Z")
 
     # Ticketmaster API fetch
     ticketmaster_data = fetch_ticketmaster(
@@ -941,7 +939,7 @@ def update_hotel(hotel_id):
         if "url" in data:
             hotel.url = data["url"].strip()
         
-        hotel.updated_at = datetime.utcnow()
+        hotel.updated_at = datetime.datetime.utcnow()
         db.session.commit()
         
         return jsonify({
@@ -1093,7 +1091,7 @@ def export_event_ics(event_id: int):
             "PRODID:-//VoyagerAI//Events//EN",
             "BEGIN:VEVENT",
             f"UID:{uid}",
-            f"DTSTAMP:{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}",
+            f"DTSTAMP:{datetime.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}",
             f"DTSTART:{dt.replace('-', '')}T{tm}",
             f"SUMMARY:{event.title}",
             f"LOCATION:{(event.venue or '')} {('' if not event.city else event.city)}",
@@ -1308,7 +1306,7 @@ def add_event_review():
         event_date = data.get("event_date")
         
         if not user_email:
-            return jsonify({"success": False, "error": "Email is required"}), 400
+            return jsonify({"success": False, "error": "Email is required.."}), 400
         
         if not event_title:
             return jsonify({"success": False, "error": "Event title is required"}), 400
@@ -1335,7 +1333,7 @@ def add_event_review():
             # Update existing review
             existing_review.rating = rating
             existing_review.review_text = review_text
-            existing_review.updated_at = datetime.utcnow()
+            existing_review.updated_at = datetime.datetime.utcnow()
             db.session.commit()
             
             return jsonify({
@@ -1376,7 +1374,7 @@ def get_recommendations():
         limit = int(request.args.get("limit", 10))
         
         if not user_email:
-            return jsonify({"success": False, "error": "Email is required"}), 400
+            return jsonify({"success": False, "error": "Email is required..."}), 400
         
         recommendations = recommendation_service.get_personalized_recommendations(user_email, limit)
         
@@ -1442,7 +1440,7 @@ def get_enhanced_recommendations():
         limit = int(data.get("limit", 5))
         
         if not user_email:
-            return jsonify({"success": False, "error": "Email is required"}), 400
+            return jsonify({"success": False, "error": "Email is required..."}), 400
         
         if not events:
             return jsonify({"success": False, "error": "Events list is required"}), 400
@@ -1664,9 +1662,9 @@ def upgrade_subscription():
         if existing_sub:
             # Update existing subscription
             existing_sub.plan_type = plan_type
-            existing_sub.updated_at = datetime.utcnow()
+            existing_sub.updated_at = datetime.datetime.utcnow()
             # Set end date to 1 month from now
-            existing_sub.end_date = datetime.utcnow() + timedelta(days=30)
+            existing_sub.end_date = datetime.datetime.utcnow() + timedelta(days=30)
             db.session.commit()
         else:
             # Create new subscription
@@ -1674,9 +1672,9 @@ def upgrade_subscription():
                 user_email=user_email,
                 plan_type=plan_type,
                 status='active',
-                end_date=datetime.utcnow() + timedelta(days=30),
+                end_date=datetime.datetime.utcnow() + timedelta(days=30),
                 payment_method='mock',  # In real implementation, this would be from payment processor
-                payment_id=f"mock_{user_email}_{datetime.utcnow().timestamp()}"
+                payment_id=f"mock_{user_email}_{datetime.datetime.utcnow().timestamp()}"
             )
             db.session.add(subscription)
             db.session.commit()
@@ -1687,7 +1685,7 @@ def upgrade_subscription():
             "subscription": {
                 "plan_type": plan_type,
                 "status": "active",
-                "end_date": (datetime.utcnow() + timedelta(days=30)).isoformat(),
+                "end_date": (datetime.datetime.utcnow() + timedelta(days=30)).isoformat(),
                 "limits": Subscription(plan_type=plan_type).get_plan_limits()
             }
         })
