@@ -31,7 +31,7 @@ def test_eventbrite():
     """Test Eventbrite scraping"""
     print("🧪 Testing Eventbrite scraping...")
     try:
-        events = scrape_eventbrite_events(months_ahead=1, limit=2)
+        events = scrape_eventbrite_events(limit=2)
         print(f"✅ Eventbrite: Found {len(events)} events")
         if events:
             print(f"   Sample: {events[0].get('title', 'No title')}")

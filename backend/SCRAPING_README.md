@@ -151,7 +151,7 @@ from app.services.scraper import (
 bms_events = scrape_bookmyshow_events("Mumbai", limit=10)
 
 # Eventbrite
-eventbrite_events = scrape_eventbrite_events(months_ahead=6, limit=50)
+eventbrite_events = scrape_eventbrite_events(limit=50)
 
 # EuropaTicket
 europaticket_events = scrape_europaticket_events(limit=50)

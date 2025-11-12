@@ -674,10 +674,9 @@ def scrape_eventbrite_only():
     """Scrape events from Eventbrite only."""
     try:
         data = request.get_json() or {}
-        months_ahead = data.get("months_ahead", 6)
         limit = data.get("limit", 50)
 
-        scraped_events = scrape_eventbrite_events(months_ahead, limit)
+        scraped_events = scrape_eventbrite_events(limit=limit)
 
         saved_count = 0
         for event_data in scraped_events:
