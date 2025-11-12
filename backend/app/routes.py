@@ -18,12 +18,15 @@ from .services.eventbrite import fetch_events as fetch_eventbrite
 from .services.csv_loader import csv_loader
 from .services.images import search_pixabay_image
 from .services.elasticsearch_service import es_service
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from io import StringIO
 import os
 import hashlib
 
 bp = Blueprint("api", __name__)
+
+# Constants for error messages to avoid duplication
+ERROR_EMAIL_REQUIRED = "Email is required"
 
 
 def _parse_date_shortcuts(when):
@@ -54,7 +57,7 @@ def _fetch_ticketmaster_events(query_param, city, limit):
     try:
         from .services.ticketmaster import fetch_events as fetch_ticketmaster
         search_term = query_param or city or "Toronto"
-        today = datetime.utcnow().strftime("%Y-%m-%dT00:00:00Z")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00Z")
         
         ticketmaster_data = fetch_ticketmaster(
             query=search_term,
@@ -977,7 +980,7 @@ def update_hotel(hotel_id):
         if "url" in data:
             hotel.url = data["url"].strip()
         
-        hotel.updated_at = datetime.utcnow()
+        hotel.updated_at = datetime.now(timezone.utc)
         db.session.commit()
         
         return jsonify({
@@ -1131,7 +1134,7 @@ def export_event_ics(event_id: int):
             "PRODID:-//VoyagerAI//Events//EN",
             "BEGIN:VEVENT",
             f"UID:{uid}",
-            f"DTSTAMP:{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}",
+            f"DTSTAMP:{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
             f"DTSTART:{dt.replace('-', '')}T{tm}",
             f"SUMMARY:{event.title}",
             f"LOCATION:{(event.venue or '')} {('' if not event.city else event.city)}",
@@ -1348,7 +1351,7 @@ def add_event_review():
         event_date = data.get("event_date")
         
         if not user_email:
-            return error_response("Email is required", 400)
+            return error_response(ERROR_EMAIL_REQUIRED, 400)
         
         if not event_title:
             return error_response("Event title is required", 400)
@@ -1375,7 +1378,7 @@ def add_event_review():
             # Update existing review
             existing_review.rating = rating
             existing_review.review_text = review_text
-            existing_review.updated_at = datetime.utcnow()
+            existing_review.updated_at = datetime.now(timezone.utc)
             db.session.commit()
             
             return jsonify({
@@ -1417,7 +1420,7 @@ def get_recommendations():
         limit = int(request.args.get("limit", 10))
         
         if not user_email:
-            return error_response("Email is required", 400)
+            return error_response(ERROR_EMAIL_REQUIRED, 400)
         
         recommendations = recommendation_service.get_personalized_recommendations(user_email, limit)
         
@@ -1484,7 +1487,7 @@ def get_enhanced_recommendations():
         limit = int(data.get("limit", 5))
         
         if not user_email:
-            return error_response("Email is required", 400)
+            return error_response(ERROR_EMAIL_REQUIRED, 400)
         
         if not events:
             return error_response("Events list is required", 400)
@@ -1643,7 +1646,7 @@ def get_subscription_status():
         user_email = request.args.get("email", "").strip()
         
         if not user_email:
-            return error_response("Email is required", 400)
+            return error_response(ERROR_EMAIL_REQUIRED, 400)
         
         # Get user's subscription
         subscription = Subscription.query.filter_by(user_email=user_email, status='active').first()
@@ -1695,7 +1698,7 @@ def upgrade_subscription():
         plan_type = data.get("plan_type", "").strip().lower()
         
         if not user_email:
-            return error_response("Email is required", 400)
+            return error_response(ERROR_EMAIL_REQUIRED, 400)
         
         if plan_type not in ["premium", "pro"]:
             return error_response("Invalid plan type", 400)
@@ -1706,9 +1709,9 @@ def upgrade_subscription():
         if existing_sub:
             # Update existing subscription
             existing_sub.plan_type = plan_type
-            existing_sub.updated_at = datetime.utcnow()
+            existing_sub.updated_at = datetime.now(timezone.utc)
             # Set end date to 1 month from now
-            existing_sub.end_date = datetime.utcnow() + timedelta(days=30)
+            existing_sub.end_date = datetime.now(timezone.utc) + timedelta(days=30)
             db.session.commit()
         else:
             # Create new subscription
@@ -1716,9 +1719,9 @@ def upgrade_subscription():
                 user_email=user_email,
                 plan_type=plan_type,
                 status='active',
-                end_date=datetime.utcnow() + timedelta(days=30),
+                end_date=datetime.now(timezone.utc) + timedelta(days=30),
                 payment_method='mock',  # In real implementation, this would be from payment processor
-                payment_id=f"mock_{user_email}_{datetime.utcnow().timestamp()}"
+                payment_id=f"mock_{user_email}_{datetime.now(timezone.utc).timestamp()}"
             )
             db.session.add(subscription)
             db.session.commit()
@@ -1729,7 +1732,7 @@ def upgrade_subscription():
             "subscription": {
                 "plan_type": plan_type,
                 "status": "active",
-                "end_date": (datetime.utcnow() + timedelta(days=30)).isoformat(),
+                "end_date": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
                 "limits": Subscription(plan_type=plan_type).get_plan_limits()
             }
         })

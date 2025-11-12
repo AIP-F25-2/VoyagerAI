@@ -1,9 +1,13 @@
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 import os
-from datetime import datetime, timedelta
+
+# Helper function for UTC datetime defaults
+def utcnow():
+    """Return current UTC datetime for SQLAlchemy defaults"""
+    return datetime.now(timezone.utc)
 
 # SQLAlchemy (sujan branch)
 db = SQLAlchemy()
@@ -19,7 +23,7 @@ class Event(db.Model):
     price = db.Column(db.String(100), nullable=True)
     url = db.Column(db.String(1000), nullable=True)
     city = db.Column(db.String(100), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def to_dict(self):
         return {
@@ -41,7 +45,7 @@ class User(db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
     is_active = db.Column(db.Boolean, default=True)
     is_verified = db.Column(db.Boolean, default=False)
     email_verification_token = db.Column(db.String(255), nullable=True)
@@ -65,7 +69,7 @@ class User(db.Model):
         payload = {
             'user_id': self.id,
             'email': self.email,
-            'exp': datetime.datetime.utcnow() + timedelta(days=7)  # Token expires in 7 days
+            'exp': datetime.now(timezone.utc) + timedelta(days=7)  # Token expires in 7 days
         }
         return jwt.encode(payload, secret_key, algorithm='HS256')
 
@@ -95,7 +99,7 @@ class User(db.Model):
             'user_id': self.id,
             'email': self.email,
             'type': 'email_verification',
-            'exp': datetime.datetime.utcnow() + timedelta(hours=24)  # 24 hour expiry
+            'exp': datetime.now(timezone.utc) + timedelta(hours=24)  # 24 hour expiry
         }
         token = jwt.encode(payload, secret_key, algorithm='HS256')
         self.email_verification_token = token
@@ -111,11 +115,11 @@ class User(db.Model):
             'user_id': self.id,
             'email': self.email,
             'type': 'password_reset',
-            'exp': datetime.datetime.utcnow() + timedelta(hours=1)  # 1 hour expiry
+            'exp': datetime.now(timezone.utc) + timedelta(hours=1)  # 1 hour expiry
         }
         token = jwt.encode(payload, secret_key, algorithm='HS256')
         self.password_reset_token = token
-        self.password_reset_expires = datetime.datetime.utcnow() + timedelta(hours=1)
+        self.password_reset_expires = datetime.now(timezone.utc) + timedelta(hours=1)
         return token
 
     @staticmethod
@@ -194,8 +198,8 @@ class Hotel(db.Model):
     check_in = db.Column(db.Date, nullable=True)
     check_out = db.Column(db.Date, nullable=True)
     source = db.Column(db.String(50), default='csv')  # csv, api, manual
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
     def to_dict(self):
         return {
@@ -226,7 +230,7 @@ class Flight(db.Model):
     flight_number = db.Column(db.String(50), nullable=True)
     price = db.Column(db.String(50), nullable=True)
     url = db.Column(db.String(1000), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def to_dict(self):
         return {
@@ -247,7 +251,7 @@ class EventImage(db.Model):
     event_id = db.Column(db.Integer, db.ForeignKey('event.id'), nullable=False)
     url = db.Column(db.String(1000), nullable=False)
     source = db.Column(db.String(50), nullable=True)  # e.g., 'pixabay'
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
 
 class Favorite(db.Model):
@@ -263,7 +267,7 @@ class Favorite(db.Model):
     url = db.Column(db.String(1000), nullable=True)
     image_url = db.Column(db.String(1000), nullable=True)
     provider = db.Column(db.String(100), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     # Enforce uniqueness at the DB level to prevent duplicates
     __table_args__ = (
@@ -297,8 +301,8 @@ class Itinerary(db.Model):
     end_date = db.Column(db.Date, nullable=True)
     budget = db.Column(db.Float, nullable=True)
     status = db.Column(db.String(50), default='draft')  # draft, active, completed, cancelled
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
     
     # Relationship with user
     user = db.relationship('User', backref=db.backref('itineraries', lazy=True))
@@ -337,8 +341,8 @@ class ItineraryItem(db.Model):
     image_url = db.Column(db.String(1000), nullable=True)
     status = db.Column(db.String(50), default='planned')  # planned, confirmed, completed, cancelled
     order_index = db.Column(db.Integer, default=0)  # For ordering items within itinerary
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
     
     def to_dict(self):
         return {
@@ -370,7 +374,7 @@ class EventShare(db.Model):
     event_date = db.Column(db.Date, nullable=True)
     share_platform = db.Column(db.String(50), nullable=False)  # facebook, twitter, email, whatsapp, etc.
     share_url = db.Column(db.String(1000), nullable=True)  # The actual shared URL
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def to_dict(self):
         return {
@@ -395,8 +399,8 @@ class EventReview(db.Model):
     rating = db.Column(db.Integer, nullable=False)  # 1-5 stars
     review_text = db.Column(db.Text, nullable=True)
     event_date = db.Column(db.Date, nullable=True)  # When they attended
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
     # Enforce one review per user per event
     __table_args__ = (
@@ -427,8 +431,8 @@ class Subscription(db.Model):
     auto_renew = db.Column(db.Boolean, default=True)
     payment_method = db.Column(db.String(100), nullable=True)  # stripe, paypal, etc.
     payment_id = db.Column(db.String(200), nullable=True)  # External payment ID
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
     # Enforce one active subscription per user
     __table_args__ = (
@@ -453,7 +457,7 @@ class Subscription(db.Model):
         """Check if subscription is currently active"""
         if self.status != 'active':
             return False
-        if self.end_date and self.end_date < datetime.datetime.utcnow():
+        if self.end_date and self.end_date < datetime.now(timezone.utc):
             return False
         return True
     

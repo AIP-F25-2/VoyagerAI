@@ -4,7 +4,7 @@ Provides fast, scalable search capabilities for events.
 """
 import os
 from typing import Dict, List, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from elasticsearch import Elasticsearch
 from elasticsearch.exceptions import ConnectionError, NotFoundError
 from dotenv import load_dotenv
@@ -193,7 +193,7 @@ class ElasticsearchService:
                 "price_min": price_min,
                 "price_max": price_max,
                 "image_url": image_url,
-                "created_at": datetime.utcnow().isoformat()
+                "created_at": datetime.now(timezone.utc).isoformat()
             }
             
             # Index the document

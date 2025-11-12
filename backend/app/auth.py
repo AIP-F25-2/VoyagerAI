@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from functools import wraps
 from .models import db, User
 from .services.email_service import email_service
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 
 auth_bp = Blueprint("auth", __name__)
@@ -77,7 +77,7 @@ def signup():
             return jsonify({"success": False, "message": "Invalid email format"}), 400
         
         if not password:
-            return jsonify({"success": False, "message": "Password is required"}), 400
+            return jsonify({"success": False, "message": ERROR_PASSWORD_REQUIRED}), 400
         
         is_valid, message = validate_password(password)
         if not is_valid:
@@ -137,7 +137,7 @@ def login():
             return jsonify({"success": False, "message": ERROR_EMAIL_REQUIRED}), 400
         
         if not password:
-            return jsonify({"success": False, "message": "Password is required"}), 400
+            return jsonify({"success": False, "message": ERROR_PASSWORD_REQUIRED}), 400
         
         # Find user
         user = User.query.filter_by(email=email).first()
@@ -406,7 +406,7 @@ def reset_password():
             return jsonify({"success": False, "message": "Invalid or expired reset token"}), 400
         
         # Check if reset token is still valid
-        if user.password_reset_expires and user.password_reset_expires < datetime.utcnow():
+        if user.password_reset_expires and user.password_reset_expires < datetime.now(timezone.utc):
             return jsonify({"success": False, "message": "Reset token has expired"}), 400
         
         # Update password and clear reset token

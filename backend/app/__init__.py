@@ -6,7 +6,7 @@ from flask_caching import Cache
 from sentry_sdk.integrations.flask import FlaskIntegration
 import sentry_sdk
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -112,7 +112,7 @@ def create_app():
             
             return {
                 "status": "healthy",
-                "timestamp": datetime.datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "database": "connected",
                 "event_count": event_count,
                 "elasticsearch": es_status,
@@ -121,7 +121,7 @@ def create_app():
         except Exception as e:
             return {
                 "status": "unhealthy",
-                "timestamp": datetime.datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "error": str(e)
             }, 500
 
