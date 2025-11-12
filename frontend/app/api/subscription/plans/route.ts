@@ -6,9 +6,10 @@ export async function GET() {
     const res = await fetch(`${API_BASE_URL}/api/subscription/plans`);
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to fetch subscription plans";
     return NextResponse.json(
-      { success: false, error: "Failed to fetch subscription plans" },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

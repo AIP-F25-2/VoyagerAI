@@ -814,7 +814,7 @@ def _collect_europaticket_event_urls(start_str, end_str):
 def _parse_europaticket_event_pages(all_event_urls, limit):
     """Parse all event pages and return results."""
     results = []
-    for idx, event_url in enumerate(list(sorted(all_event_urls))[:limit]):
+    for idx, event_url in enumerate(sorted(all_event_urls)[:limit]):
         print(f"    [{idx+1}/{min(len(all_event_urls), limit)}] parsing {event_url}")
         data = parse_europaticket_event_page(event_url)
         if data:

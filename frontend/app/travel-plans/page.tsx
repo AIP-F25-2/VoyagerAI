@@ -318,8 +318,9 @@ export default function ItinerariesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Start Date</label>
+                  <label htmlFor="start_date" className="block text-sm font-medium mb-2">Start Date</label>
                   <input
+                    id="start_date"
                     type="date"
                     value={newItinerary.start_date}
                     onChange={(e) => setNewItinerary({...newItinerary, start_date: e.target.value})}
@@ -327,8 +328,9 @@ export default function ItinerariesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">End Date</label>
+                  <label htmlFor="end_date" className="block text-sm font-medium mb-2">End Date</label>
                   <input
+                    id="end_date"
                     type="date"
                     value={newItinerary.end_date}
                     onChange={(e) => setNewItinerary({...newItinerary, end_date: e.target.value})}
@@ -336,8 +338,9 @@ export default function ItinerariesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Budget ($)</label>
+                  <label htmlFor="budget" className="block text-sm font-medium mb-2">Budget ($)</label>
                   <input
+                    id="budget"
                     type="number"
                     step="0.01"
                     value={newItinerary.budget}
@@ -347,8 +350,9 @@ export default function ItinerariesPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">Description</label>
+                <label htmlFor="description" className="block text-sm font-medium mb-2">Description</label>
                 <textarea
+                  id="description"
                   value={newItinerary.description}
                   onChange={(e) => setNewItinerary({...newItinerary, description: e.target.value})}
                   rows={3}

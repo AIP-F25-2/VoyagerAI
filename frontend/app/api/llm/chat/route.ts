@@ -15,9 +15,10 @@ export async function POST(request: NextRequest) {
 
     const data = await response.json();
     return NextResponse.json(data, { status: response.status });
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to connect to LLM service";
     return NextResponse.json(
-      { success: false, error: "Failed to connect to LLM service" },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }

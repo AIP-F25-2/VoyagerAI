@@ -1139,7 +1139,6 @@ def flights_search():
         destination = request.args.get("destination", "").upper().strip()
         departure_date = request.args.get("departure_date", "").strip()
         return_date = request.args.get("return_date", "").strip() or None
-        adults = int(request.args.get("adults", "1") or 1)
         limit = int(request.args.get("limit", "10") or 10)
 
         if not origin or not destination or not departure_date:

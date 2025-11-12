@@ -17,9 +17,10 @@ export async function GET(req: Request) {
     const res = await fetch(`${API_BASE_URL}/api/events/reviews?${params.toString()}`);
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to fetch reviews";
     return NextResponse.json(
-      { success: false, error: "Failed to fetch reviews" },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
@@ -37,9 +38,10 @@ export async function POST(req: Request) {
     
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Failed to submit review";
     return NextResponse.json(
-      { success: false, error: "Failed to submit review" },
+      { success: false, error: errorMessage },
       { status: 500 }
     );
   }
