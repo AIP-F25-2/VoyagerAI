@@ -17,11 +17,11 @@ fi
 PSQL_CMD=""
 if command -v psql &> /dev/null; then
     PSQL_CMD="psql"
-elif [ -f "/Applications/PostgreSQL 17/SQL Shell (psql).app/Contents/MacOS/psql" ]; then
+elif [[ -f "/Applications/PostgreSQL 17/SQL Shell (psql).app/Contents/MacOS/psql" ]]; then
     PSQL_CMD="/Applications/PostgreSQL 17/SQL Shell (psql).app/Contents/MacOS/psql"
-elif [ -f "/usr/local/bin/psql" ]; then
+elif [[ -f "/usr/local/bin/psql" ]]; then
     PSQL_CMD="/usr/local/bin/psql"
-elif [ -f "/opt/homebrew/bin/psql" ]; then
+elif [[ -f "/opt/homebrew/bin/psql" ]]; then
     PSQL_CMD="/opt/homebrew/bin/psql"
 else
     echo "❌ psql command not found. Please add PostgreSQL to your PATH:"
