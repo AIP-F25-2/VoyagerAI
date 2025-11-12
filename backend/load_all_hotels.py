@@ -3,6 +3,12 @@ import re
 import csv
 from app import create_app
 from app.models import db, Hotel
+# Import helper functions from load_hotels_to_db
+from load_hotels_to_db import (
+    CSV_COLUMN_HOTEL_NAME, CSV_COLUMN_LOCATION, CSV_COLUMN_RATING,
+    CSV_COLUMN_REVIEWS, CSV_COLUMN_PRICE, CSV_COLUMN_URL,
+    _extract_rating_from_text, _extract_review_count, _extract_city_from_location
+)
 
 def load_all_hotels():
     app = create_app()
@@ -54,48 +60,19 @@ def load_all_hotels():
 def parse_hotel_row(row):
     """Parse a single hotel row from CSV"""
     try:
-        hotel_name = row.get('Hotel Name', '').strip()
+        hotel_name = row.get(CSV_COLUMN_HOTEL_NAME, '').strip()
         if not hotel_name:
             return None
         
-        location = row.get('Location', '').strip()
-        rating_text = row.get('Rating', '').strip()
-        reviews_text = row.get('Reviews', '').strip()
-        price_text = row.get('Price', '').strip()
-        url = row.get('URL', '').strip()
+        location = row.get(CSV_COLUMN_LOCATION, '').strip()
+        rating_text = row.get(CSV_COLUMN_RATING, '').strip()
+        reviews_text = row.get(CSV_COLUMN_REVIEWS, '').strip()
+        price_text = row.get(CSV_COLUMN_PRICE, '').strip()
+        url = row.get(CSV_COLUMN_URL, '').strip()
         
-        # Extract rating from text like "Scored 8.8\n8.8\nExcellent\n7,713 reviews"
-        rating = None
-        if rating_text:
-            rating_match = re.search(r'(\d+\.?\d*)', rating_text)
-            if rating_match:
-                rating = float(rating_match.group(1))
-        
-        # Extract review count
-        review_count = 0
-        if reviews_text:
-            review_match = re.search(r'(\d+(?:,\d+)*)\s*reviews?', reviews_text)
-            if review_match:
-                review_count = int(review_match.group(1).replace(',', ''))
-        
-        # Extract city from location - improved parsing
-        city = "Unknown"
-        if location:
-            # Try to extract city from location string
-            # Pattern: "District, City (District)" or "City" or "District, City"
-            city_match = re.search(r',\s*([A-Za-z\s]+?)(?:\s*\([^)]+\))?$', location)
-            if city_match:
-                city = city_match.group(1).strip()
-            else:
-                # Fallback: look for common city patterns
-                city_patterns = [
-                    r'\b(Toronto|Mumbai|Delhi|Bangalore|Chennai|Kolkata|Hyderabad|Pune|Ahmedabad|Jaipur|London|Paris|Berlin|Rome|Amsterdam|Madrid|Vienna|Prague|Barcelona|Munich|Zurich|Geneva|Brussels|Copenhagen|Stockholm|Oslo|Helsinki|Dublin|Edinburgh|Glasgow|Manchester|Birmingham|Liverpool|Leeds|Sheffield|Newcastle|Nottingham|Leicester|Coventry|Bradford|Cardiff|Belfast|Southampton|Portsmouth|Plymouth|Exeter|Bristol|Bath|Oxford|Cambridge|Canterbury|Norwich|Ipswich|Colchester|Chelmsford|Southend|Basildon|Maidstone|Gillingham|Chatham|Rochester|Dartford|Gravesend|Sevenoaks|Tunbridge Wells|Tonbridge|Ashford|Folkestone|Dover|Canterbury|Margate|Ramsgate|Broadstairs|Deal|Sandwich|Faversham|Whitstable|Herne Bay|Birchington|Westgate|Cliftonville|Manston|Ramsgate|Broadstairs|Margate|Cliftonville|Westgate|Birchington|Herne Bay|Whitstable|Faversham|Sandwich|Deal|Dover|Folkestone|Ashford|Tonbridge|Tunbridge Wells|Sevenoaks|Gravesend|Dartford|Rochester|Chatham|Gillingham|Maidstone|Basildon|Southend|Chelmsford|Colchester|Ipswich|Norwich|Canterbury|Cambridge|Oxford|Bath|Bristol|Exeter|Plymouth|Portsmouth|Southampton|Belfast|Cardiff|Bradford|Coventry|Leicester|Nottingham|Newcastle|Sheffield|Leeds|Liverpool|Birmingham|Manchester|Glasgow|Edinburgh|Dublin|Helsinki|Oslo|Stockholm|Copenhagen|Brussels|Geneva|Zurich|Munich|Barcelona|Prague|Vienna|Madrid|Amsterdam|Rome|Berlin|Paris|London|Jaipur|Ahmedabad|Pune|Hyderabad|Kolkata|Chennai|Bangalore|Delhi|Mumbai)\b'
-                ]
-                for pattern in city_patterns:
-                    city_match = re.search(pattern, location, re.IGNORECASE)
-                    if city_match:
-                        city = city_match.group(1).strip()
-                        break
+        rating = _extract_rating_from_text(rating_text)
+        review_count = _extract_review_count(reviews_text)
+        city = _extract_city_from_location(location)
         
         return {
             "name": hotel_name,
