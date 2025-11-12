@@ -24,6 +24,261 @@ import os
 bp = Blueprint("api", __name__)
 
 
+def _parse_date_shortcuts(when):
+    """Parse 'when' shortcuts into date_from and date_to."""
+    if not when:
+        return None, None
+    
+    today = date.today()
+        if when == "tonight":
+        return today.isoformat(), today.isoformat()
+        elif when == "weekend":
+            days_ahead = (4 - today.weekday()) % 7  # Friday index 4
+            start = today + timedelta(days=days_ahead)
+            end = start + timedelta(days=2)
+        return start.isoformat(), end.isoformat()
+        elif when == "this_week":
+            end = today + timedelta(days=7)
+        return today.isoformat(), end.isoformat()
+        elif when == "this_month":
+            end = today + timedelta(days=30)
+        return today.isoformat(), end.isoformat()
+    return None, None
+
+
+def _fetch_ticketmaster_events(query_param, city, limit):
+    """Fetch events from Ticketmaster API."""
+        ticketmaster_events = []
+        try:
+            from .services.ticketmaster import fetch_events as fetch_ticketmaster
+            search_term = query_param or city or "Toronto"
+            today = datetime.utcnow().strftime("%Y-%m-%dT00:00:00Z")
+            
+            ticketmaster_data = fetch_ticketmaster(
+                query=search_term,
+                city=city,
+                start_date=today,
+                size=min(limit, 20)
+            )
+            
+            if ticketmaster_data and '_embedded' in ticketmaster_data:
+                raw_events = ticketmaster_data['_embedded']['events']
+                for i, event in enumerate(raw_events):
+                    if 'id' not in event or not event['id']:
+                        event['id'] = f"tm_{i}_{hash(event.get('name', ''))}"
+                if 'source' not in event:
+                    event['source'] = 'ticketmaster'
+                ticketmaster_events = raw_events
+                print(f"✅ Ticketmaster: Found {len(ticketmaster_events)} real events")
+            else:
+                print("⚠️ Ticketmaster: No events found")
+        except Exception as e:
+            print(f"❌ Ticketmaster API Error: {e}")
+
+    return ticketmaster_events
+
+
+def _fetch_eventbrite_events(city, query_param, date_from, date_to, limit):
+    """Fetch events from Eventbrite database."""
+        eventbrite_events = []
+        try:
+            db_query = Event.query
+            if city:
+                db_query = db_query.filter(Event.city.ilike(f"%{city}%"))
+            if query_param:
+                db_query = db_query.filter(Event.title.ilike(f"%{query_param}%"))
+        
+            try:
+                if date_from:
+                    df = datetime.strptime(date_from, "%Y-%m-%d").date()
+                    db_query = db_query.filter(Event.date >= df)
+                if date_to:
+                    dt_ = datetime.strptime(date_to, "%Y-%m-%d").date()
+                    db_query = db_query.filter(Event.date <= dt_)
+            except Exception:
+                pass
+
+            events = db_query.order_by(Event.created_at.desc()).limit(limit).all()
+            
+            for i, event in enumerate(events):
+                formatted_event = {
+                    "id": f"eb_{event.id if hasattr(event, 'id') else i}_{hash(event.title)}",
+                "name": event.title,
+                    "url": event.url,
+                    "dates": {
+                        "start": {
+                            "localDate": event.date.isoformat() if event.date else "2024-01-01",
+                            "localTime": event.time.strftime("%H:%M") if event.time else "19:00"
+                        }
+                    },
+                    "images": [{"url": "/placeholder.jpg"}],
+                    "_embedded": {
+                        "venues": [{
+                            "name": event.venue or "TBA",
+                            "city": {"name": event.city or "Unknown"}
+                        }]
+                    },
+                "priceRanges": [{"min": 0, "max": 100}] if event.price else None,
+                "source": "eventbrite"
+                }
+                eventbrite_events.append(formatted_event)
+            
+            print(f"✅ Eventbrite (DB): Found {len(eventbrite_events)} events")
+        except Exception as e:
+            print(f"❌ Eventbrite DB Error: {e}")
+
+    return eventbrite_events
+
+
+def _fetch_csv_events(query_param, city, limit):
+    """Fetch events from CSV files."""
+        csv_events = []
+        try:
+            if query_param:
+                csv_events = csv_loader.get_events_by_query(query_param)
+                if not csv_events and city:
+                    csv_events = csv_loader.get_events_by_city(city)
+                if not csv_events:
+                    csv_events = csv_loader.load_all_csv_events()
+            else:
+                if city:
+                    csv_events = csv_loader.get_events_by_city(city)
+                if not csv_events:
+                    csv_events = csv_loader.load_all_csv_events()
+            
+            csv_events = csv_events[:limit]
+            print(f"✅ CSV Events: Found {len(csv_events)} events")
+
+            saved = _save_csv_events_to_db(csv_events)
+            if saved:
+                print(f"💾 Saved {saved} CSV events to database")
+        except Exception as e:
+            print(f"❌ CSV Events Error: {e}")
+
+    return csv_events
+
+
+def _enrich_events_with_images(events):
+    """Enrich events with images from Pixabay if missing."""
+        def with_image(ev):
+            if isinstance(ev.get("images"), list) and ev["images"]:
+                return ev
+            q = ev.get("name") or ev.get("title") or ""
+            img = search_pixabay_image(q) if q else None
+            if img:
+                ev["images"] = [{"url": img}]
+            return ev
+    return [with_image(e) for e in events]
+
+
+def _apply_date_filters(ev_list, date_from, date_to):
+    """Apply date filters to event list."""
+            if not (date_from or date_to):
+                return ev_list
+            filtered = []
+            for ev in ev_list:
+                d = (ev.get("dates") or {}).get("start", {}).get("localDate")
+                try:
+                    if not d:
+                        continue
+                    dval = datetime.strptime(d, "%Y-%m-%d").date()
+                    if date_from:
+                        df = datetime.strptime(date_from, "%Y-%m-%d").date()
+                        if dval < df:
+                            continue
+                    if date_to:
+                        dt_ = datetime.strptime(date_to, "%Y-%m-%d").date()
+                        if dval > dt_:
+                            continue
+                    filtered.append(ev)
+                except Exception:
+                    continue
+            return filtered
+
+
+def _apply_provider_filter(ticketmaster_events, eventbrite_events, csv_events, provider):
+    """Apply provider filter to event lists."""
+        if provider in {"ticketmaster", "tm"}:
+        return ticketmaster_events, [], []
+        elif provider in {"eventbrite", "eb"}:
+        return [], eventbrite_events, []
+    elif provider == "csv":
+        return [], [], csv_events
+    return ticketmaster_events, eventbrite_events, csv_events
+
+
+def _search_with_elasticsearch(query_param, city, category, date_from, date_to, 
+                                price_min, price_max, provider, page, page_size):
+    """Search events using Elasticsearch if available."""
+    if not es_service.is_available():
+        return None
+    
+    if not (query_param or city or date_from or date_to or price_min or price_max or category):
+        return None
+    
+    try:
+        price_min_float = float(price_min) if price_min else None
+        price_max_float = float(price_max) if price_max else None
+        
+        source_filter = None
+        if provider in {"ticketmaster", "tm"}:
+            source_filter = "ticketmaster"
+        elif provider in {"eventbrite", "eb"}:
+            source_filter = "eventbrite"
+        elif provider == "csv":
+            source_filter = "csv"
+        
+        es_results = es_service.search_events(
+            query=query_param if query_param else None,
+            city=city if city else None,
+            category=category if category else None,
+            date_from=date_from if date_from else None,
+            date_to=date_to if date_to else None,
+            price_min=price_min_float,
+            price_max=price_max_float,
+            source=source_filter,
+            sort="date_asc",
+            page=page,
+            page_size=page_size
+        )
+        
+        if es_results["total"] > 0:
+            print(f"🔍 Elasticsearch found {es_results['total']} events")
+            es_events = es_results["events"]
+            es_ticketmaster = [e for e in es_events if e.get("source") == "ticketmaster"]
+            es_eventbrite = [e for e in es_events if e.get("source") == "eventbrite"]
+            es_csv = [e for e in es_events if e.get("source") == "csv"]
+            
+            if source_filter:
+                if source_filter == "ticketmaster":
+                    es_eventbrite, es_csv = [], []
+                elif source_filter == "eventbrite":
+                    es_ticketmaster, es_csv = [], []
+                elif source_filter == "csv":
+                    es_ticketmaster, es_eventbrite = [], []
+            
+            return {
+                "ticketmaster": es_ticketmaster,
+                "eventbrite": es_eventbrite,
+                "csv_events": es_csv,
+                "merged": es_events,
+                "pagination": {
+                    "page": es_results["page"],
+                    "page_size": es_results["page_size"],
+                    "total": es_results["total"]
+                },
+                "source": "elasticsearch"
+            }
+        else:
+            print("⚠️  Elasticsearch returned no results, using fallback")
+    except Exception as e:
+        print(f"⚠️  Elasticsearch search failed: {e}, using fallback")
+        import traceback
+        traceback.print_exc()
+    
+    return None
+
+
 def _save_csv_events_to_db(csv_events):
     """Persist CSV-derived events into the SQL database if not already present."""
     saved_count = 0
@@ -112,211 +367,48 @@ def home():
 def get_events():
     """Get events from real APIs and database, format for frontend."""
     try:
+        # Parse request parameters
         city = request.args.get("city", "").strip()
         query_param = request.args.get("q", "").strip()
-        limit = int(request.args.get("limit", 1000))  # Increased from 50 to 1000
-        # Enhanced filters
-        provider = request.args.get("provider", "").strip().lower()  # ticketmaster|eventbrite|csv|all
+        limit = int(request.args.get("limit", 1000))
+        provider = request.args.get("provider", "").strip().lower()
         date_from = request.args.get("date_from", "").strip()
         date_to = request.args.get("date_to", "").strip()
         price_min = request.args.get("price_min", "").strip()
         price_max = request.args.get("price_max", "").strip()
-        when = request.args.get("when", "").strip().lower()  # tonight|weekend|this_week|this_month
-        category = request.args.get("category", "").strip().lower()  # music|sports|arts|food|tech|business
-        venue = request.args.get("venue", "").strip()
-        accessibility = request.args.get("accessibility", "").strip().lower()  # wheelchair|hearing|visual
+        when = request.args.get("when", "").strip().lower()
+        category = request.args.get("category", "").strip().lower()
         page = max(1, int(request.args.get("page", 1)))
-        page_size = max(1, min(1000, int(request.args.get("page_size", limit))))  # Increased from 100 to 1000
+        page_size = max(1, min(1000, int(request.args.get("page_size", limit))))
 
-        # Interpret shortcuts
-        if when == "tonight":
-            date_from = date.today().isoformat()
-            date_to = date.today().isoformat()
-        elif when == "weekend":
-            today = date.today()
-            # Next Friday to Sunday
-            days_ahead = (4 - today.weekday()) % 7  # Friday index 4
-            start = today + timedelta(days=days_ahead)
-            end = start + timedelta(days=2)
-            date_from = start.isoformat()
-            date_to = end.isoformat()
-        elif when == "this_week":
-            today = date.today()
-            start = today
-            end = today + timedelta(days=7)
-            date_from = start.isoformat()
-            date_to = end.isoformat()
-        elif when == "this_month":
-            today = date.today()
-            start = today
-            end = today + timedelta(days=30)
-            date_from = start.isoformat()
-            date_to = end.isoformat()
+        # Parse date shortcuts
+        when_date_from, when_date_to = _parse_date_shortcuts(when)
+        if when_date_from and not date_from:
+            date_from = when_date_from
+        if when_date_to and not date_to:
+            date_to = when_date_to
 
-        # Get real Ticketmaster events
-        ticketmaster_events = []
-        try:
-            from .services.ticketmaster import fetch_events as fetch_ticketmaster
-            from datetime import datetime
-            
-            # Use query_param or city for Ticketmaster search
-            search_term = query_param or city or "Toronto"
-            today = datetime.utcnow().strftime("%Y-%m-%dT00:00:00Z")
-            
-            ticketmaster_data = fetch_ticketmaster(
-                query=search_term,
-                city=city,
-                start_date=today,
-                size=min(limit, 20)
-            )
-            
-            if ticketmaster_data and '_embedded' in ticketmaster_data:
-                raw_events = ticketmaster_data['_embedded']['events']
-                # Ensure each event has a unique ID and source
-                for i, event in enumerate(raw_events):
-                    if 'id' not in event or not event['id']:
-                        event['id'] = f"tm_{i}_{hash(event.get('name', ''))}"
-                    # Set source for Elasticsearch indexing
-                    if 'source' not in event:
-                        event['source'] = 'ticketmaster'
-                ticketmaster_events = raw_events
-                print(f"✅ Ticketmaster: Found {len(ticketmaster_events)} real events")
-            else:
-                print("⚠️ Ticketmaster: No events found")
-        except Exception as e:
-            print(f"❌ Ticketmaster API Error: {e}")
+        # Fetch events from all sources
+        ticketmaster_events = _fetch_ticketmaster_events(query_param, city, limit)
+        eventbrite_events = _fetch_eventbrite_events(city, query_param, date_from, date_to, limit)
+        csv_events = _fetch_csv_events(query_param, city, limit)
 
-        # Get events from database for Eventbrite (since API is not working)
-        eventbrite_events = []
-        try:
-            db_query = Event.query
-            if city:
-                db_query = db_query.filter(Event.city.ilike(f"%{city}%"))
-            if query_param:
-                db_query = db_query.filter(Event.title.ilike(f"%{query_param}%"))
-            # Date filters
-            try:
-                if date_from:
-                    df = datetime.strptime(date_from, "%Y-%m-%d").date()
-                    db_query = db_query.filter(Event.date >= df)
-                if date_to:
-                    dt_ = datetime.strptime(date_to, "%Y-%m-%d").date()
-                    db_query = db_query.filter(Event.date <= dt_)
-            except Exception:
-                pass
-
-            events = db_query.order_by(Event.created_at.desc()).limit(limit).all()
-            
-            for i, event in enumerate(events):
-                # Convert our database event to Ticketmaster format (same as Ticketmaster for consistency)
-                formatted_event = {
-                    "id": f"eb_{event.id if hasattr(event, 'id') else i}_{hash(event.title)}",
-                    "name": event.title,  # Simple string, not object
-                    "url": event.url,
-                    "dates": {
-                        "start": {
-                            "localDate": event.date.isoformat() if event.date else "2024-01-01",
-                            "localTime": event.time.strftime("%H:%M") if event.time else "19:00"
-                        }
-                    },
-                    "images": [{"url": "/placeholder.jpg"}],
-                    "_embedded": {
-                        "venues": [{
-                            "name": event.venue or "TBA",
-                            "city": {"name": event.city or "Unknown"}
-                        }]
-                    },
-                    "priceRanges": [{"min": 0, "max": 100}] if event.price else None,
-                    "source": "eventbrite"  # Set source for Elasticsearch indexing
-                }
-                eventbrite_events.append(formatted_event)
-            
-            print(f"✅ Eventbrite (DB): Found {len(eventbrite_events)} events")
-        except Exception as e:
-            print(f"❌ Eventbrite DB Error: {e}")
-
-        # Get events from CSV files
-        csv_events = []
-        try:
-            if query_param:
-                # First try filtering by search term
-                csv_events = csv_loader.get_events_by_query(query_param)
-                # If nothing matches, try by city (if provided)
-                if not csv_events and city:
-                    csv_events = csv_loader.get_events_by_city(city)
-                # As a final fallback, load all CSV events
-                if not csv_events:
-                    csv_events = csv_loader.load_all_csv_events()
-            else:
-                # No query provided; prefer city filter, else load all
-                if city:
-                    csv_events = csv_loader.get_events_by_city(city)
-                if not csv_events:
-                    csv_events = csv_loader.load_all_csv_events()
-            
-            # Limit CSV events to avoid overwhelming the response
-            csv_events = csv_events[:limit]
-            print(f"✅ CSV Events: Found {len(csv_events)} events")
-
-            # Persist CSV events to DB for future queries
-            saved = _save_csv_events_to_db(csv_events)
-            if saved:
-                print(f"💾 Saved {saved} CSV events to database")
-        except Exception as e:
-            print(f"❌ CSV Events Error: {e}")
-
-        # Enrich with a stored or fetched free image when missing
-        def with_image(ev):
-            if isinstance(ev.get("images"), list) and ev["images"]:
-                return ev
-            # Try Pixabay using event name
-            q = ev.get("name") or ev.get("title") or ""
-            img = search_pixabay_image(q) if q else None
-            if img:
-                ev["images"] = [{"url": img}]
-            return ev
-
-        def apply_date_filters(ev_list):
-            if not (date_from or date_to):
-                return ev_list
-            filtered = []
-            for ev in ev_list:
-                d = (ev.get("dates") or {}).get("start", {}).get("localDate")
-                try:
-                    if not d:
-                        continue
-                    dval = datetime.strptime(d, "%Y-%m-%d").date()
-                    if date_from:
-                        df = datetime.strptime(date_from, "%Y-%m-%d").date()
-                        if dval < df:
-                            continue
-                    if date_to:
-                        dt_ = datetime.strptime(date_to, "%Y-%m-%d").date()
-                        if dval > dt_:
-                            continue
-                    filtered.append(ev)
-                except Exception:
-                    continue
-            return filtered
-
-        ticketmaster_events = [with_image(e) for e in ticketmaster_events]
-        eventbrite_events = [with_image(e) for e in eventbrite_events]
-        csv_events = [with_image(e) for e in csv_events]
+        # Enrich events with images
+        ticketmaster_events = _enrich_events_with_images(ticketmaster_events)
+        eventbrite_events = _enrich_events_with_images(eventbrite_events)
+        csv_events = _enrich_events_with_images(csv_events)
 
         # Apply provider filter
-        if provider in {"ticketmaster", "tm"}:
-            eventbrite_events, csv_events = [], []
-        elif provider in {"eventbrite", "eb"}:
-            ticketmaster_events, csv_events = [], []
-        elif provider in {"csv"}:
-            ticketmaster_events, eventbrite_events = [], []
+        ticketmaster_events, eventbrite_events, csv_events = _apply_provider_filter(
+            ticketmaster_events, eventbrite_events, csv_events, provider
+        )
 
-        # Apply date filters to all lists
-        ticketmaster_events = apply_date_filters(ticketmaster_events)
-        eventbrite_events = apply_date_filters(eventbrite_events)
-        csv_events = apply_date_filters(csv_events)
+        # Apply date filters
+        ticketmaster_events = _apply_date_filters(ticketmaster_events, date_from, date_to)
+        eventbrite_events = _apply_date_filters(eventbrite_events, date_from, date_to)
+        csv_events = _apply_date_filters(csv_events, date_from, date_to)
 
-        # Index events in Elasticsearch (if available) for future searches
+        # Index events in Elasticsearch
         if es_service.is_available():
             try:
                 all_events_to_index = ticketmaster_events + eventbrite_events + csv_events
@@ -326,80 +418,15 @@ def get_events():
             except Exception as e:
                 print(f"⚠️  Failed to index events in Elasticsearch: {e}")
 
-        # Try Elasticsearch search if available and we have filters/query
-        use_elasticsearch = (
-            es_service.is_available() and 
-            (query_param or city or date_from or date_to or price_min or price_max or category)
+        # Try Elasticsearch search first
+        es_result = _search_with_elasticsearch(
+            query_param, city, category, date_from, date_to,
+            price_min, price_max, provider, page, page_size
         )
-        
-        if use_elasticsearch:
-            try:
-                # Convert price strings to floats
-                price_min_float = float(price_min) if price_min else None
-                price_max_float = float(price_max) if price_max else None
-                
-                # Map provider to source
-                source_filter = None
-                if provider in {"ticketmaster", "tm"}:
-                    source_filter = "ticketmaster"
-                elif provider in {"eventbrite", "eb"}:
-                    source_filter = "eventbrite"
-                elif provider == "csv":
-                    source_filter = "csv"
-                
-                # Search with Elasticsearch
-                es_results = es_service.search_events(
-                    query=query_param if query_param else None,
-                    city=city if city else None,
-                    category=category if category else None,
-                    date_from=date_from if date_from else None,
-                    date_to=date_to if date_to else None,
-                    price_min=price_min_float,
-                    price_max=price_max_float,
-                    source=source_filter,
-                    sort="date_asc",  # Default sort
-                    page=page,
-                    page_size=page_size
-                )
-                
-                if es_results["total"] > 0:
-                    print(f"🔍 Elasticsearch found {es_results['total']} events")
-                    # Group results by source for frontend compatibility
-                    es_events = es_results["events"]
-                    es_ticketmaster = [e for e in es_events if e.get("source") == "ticketmaster"]
-                    es_eventbrite = [e for e in es_events if e.get("source") == "eventbrite"]
-                    es_csv = [e for e in es_events if e.get("source") == "csv"]
-                    
-                    # If source filtering was applied, only return that source
-                    if source_filter:
-                        if source_filter == "ticketmaster":
-                            es_eventbrite, es_csv = [], []
-                        elif source_filter == "eventbrite":
-                            es_ticketmaster, es_csv = [], []
-                        elif source_filter == "csv":
-                            es_ticketmaster, es_eventbrite = [], []
-                    
-                    return jsonify({
-                        "ticketmaster": es_ticketmaster,
-                        "eventbrite": es_eventbrite,
-                        "csv_events": es_csv,
-                        "merged": es_events,
-                        "pagination": {
-                            "page": es_results["page"],
-                            "page_size": es_results["page_size"],
-                            "total": es_results["total"]
-                        },
-                        "source": "elasticsearch"
-                    })
-                else:
-                    print("⚠️  Elasticsearch returned no results, using fallback")
-            except Exception as e:
-                print(f"⚠️  Elasticsearch search failed: {e}, using fallback")
-                import traceback
-                traceback.print_exc()
+        if es_result:
+            return jsonify(es_result)
 
-        # Fallback to current method (or use when no filters)
-        # Pagination per merged result for client convenience
+        # Fallback: return merged results
         merged = ticketmaster_events + eventbrite_events + csv_events
         total = len(merged)
         start = (page - 1) * page_size

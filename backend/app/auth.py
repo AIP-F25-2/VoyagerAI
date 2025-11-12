@@ -7,6 +7,11 @@ import re
 
 auth_bp = Blueprint("auth", __name__)
 
+# Constants for error messages to avoid duplication
+ERROR_NO_DATA = "No data provided"
+ERROR_EMAIL_REQUIRED = "Email is required"
+ERROR_PASSWORD_REQUIRED = "Password is required"
+
 def token_required(f):
     """Decorator to require authentication for routes"""
     @wraps(f)
@@ -50,7 +55,7 @@ def signup():
         data = request.get_json()
         
         if not data:
-            return jsonify({"success": False, "message": "No data provided"}), 400
+            return jsonify({"success": False, "message": ERROR_NO_DATA}), 400
         
         name = data.get("name", "").strip()
         email = data.get("email", "").strip().lower()
@@ -61,7 +66,7 @@ def signup():
             return jsonify({"success": False, "message": "Name is required"}), 400
         
         if not email:
-            return jsonify({"success": False, "message": "Email is required"}), 400
+            return jsonify({"success": False, "message": ERROR_EMAIL_REQUIRED}), 400
         
         if not validate_email(email):
             return jsonify({"success": False, "message": "Invalid email format"}), 400
@@ -117,14 +122,14 @@ def login():
         data = request.get_json()
         
         if not data:
-            return jsonify({"success": False, "message": "No data provided"}), 400
+            return jsonify({"success": False, "message": ERROR_NO_DATA}), 400
         
         email = data.get("email", "").strip().lower()
         password = data.get("password", "")
         
         # Validation
         if not email:
-            return jsonify({"success": False, "message": "Email is required"}), 400
+            return jsonify({"success": False, "message": ERROR_EMAIL_REQUIRED}), 400
         
         if not password:
             return jsonify({"success": False, "message": "Password is required"}), 400
@@ -168,7 +173,7 @@ def update_profile(user):
         data = request.get_json()
         
         if not data:
-            return jsonify({"success": False, "message": "No data provided"}), 400
+            return jsonify({"success": False, "message": ERROR_NO_DATA}), 400
         
         # Update name if provided
         if "name" in data:
@@ -206,7 +211,7 @@ def change_password(user):
         data = request.get_json()
         
         if not data:
-            return jsonify({"success": False, "message": "No data provided"}), 400
+            return jsonify({"success": False, "message": ERROR_NO_DATA}), 400
         
         current_password = data.get("current_password", "")
         new_password = data.get("new_password", "")
@@ -303,7 +308,7 @@ def resend_verification():
         email = data.get("email", "").strip().lower()
         
         if not email:
-            return jsonify({"success": False, "message": "Email is required"}), 400
+            return jsonify({"success": False, "message": ERROR_EMAIL_REQUIRED}), 400
         
         user = User.query.filter_by(email=email).first()
         if not user:
@@ -341,7 +346,7 @@ def forgot_password():
         email = data.get("email", "").strip().lower()
         
         if not email:
-            return jsonify({"success": False, "message": "Email is required"}), 400
+            return jsonify({"success": False, "message": ERROR_EMAIL_REQUIRED}), 400
         
         user = User.query.filter_by(email=email).first()
         if not user:
