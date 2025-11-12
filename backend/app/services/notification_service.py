@@ -5,6 +5,7 @@ Handles event reminders and notifications
 
 import os
 from datetime import datetime, timedelta
+from typing import List
 from .email_service import email_service
 from ..models import db, Favorite, User
 import logging
