@@ -271,7 +271,7 @@ def _serve(open_browser: bool):
         webbrowser.open(url)
     print(f"[server] {url}")
     try:
-        httpd.serve_forever()
+        httpd.serve_forever()  # NOSONAR python:S5332 - Localhost HTTP server for dev only, not exposed externally
     except KeyboardInterrupt:
         pass
 
