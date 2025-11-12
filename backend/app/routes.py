@@ -784,7 +784,7 @@ def fetch_provider_events():
     city = request.args.get("city", "").strip()
     size = int(request.args.get("size", "12"))
 
-    today = datetime.utcnow().strftime("%Y-%m-%dT00:00:00Z")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%dT00:00:00Z")
 
     # Ticketmaster API fetch
     ticketmaster_data = fetch_ticketmaster(
@@ -1347,6 +1347,28 @@ def get_filter_options():
         return error_response(str(e), 500)
 
 # Event Sharing endpoints
+def _build_social_share_text(event_title, event_venue):
+    """Build share text for social media platforms."""
+    text = f"Check out this event: {event_title}"
+    if event_venue:
+        text += f" at {event_venue}"
+    return text
+
+
+def _build_email_body(event_title, event_venue, event_city, event_date, event_url):
+    """Build email body text."""
+    body = f"Hi! I thought you might be interested in this event:\n\n{event_title}"
+    if event_venue:
+        body += f"\nVenue: {event_venue}"
+    if event_city:
+        body += f"\nCity: {event_city}"
+    if event_date:
+        body += f"\nDate: {event_date}"
+    if event_url:
+        body += f"\nMore info: {event_url}"
+    return body
+
+
 def _generate_share_urls(platform, event_title, event_url, event_venue, event_city, event_date):
     """Generate share URLs for different platforms."""
     share_urls = {}
@@ -1356,28 +1378,16 @@ def _generate_share_urls(platform, event_title, event_url, event_venue, event_ci
     if platform == "facebook":
         share_urls["facebook"] = f"https://www.facebook.com/sharer/sharer.php?u={target_url}"
     elif platform == "twitter":
-        text = f"Check out this event: {event_title}"
-        if event_venue:
-            text += f" at {event_venue}"
+        text = _build_social_share_text(event_title, event_venue)
         share_urls["twitter"] = f"https://twitter.com/intent/tweet?text={text}&url={target_url}"
     elif platform == "linkedin":
         share_urls["linkedin"] = f"https://www.linkedin.com/sharing/share-offsite/?url={target_url}"
     elif platform == "whatsapp":
-        text = f"Check out this event: {event_title}"
-        if event_venue:
-            text += f" at {event_venue}"
+        text = _build_social_share_text(event_title, event_venue)
         share_urls["whatsapp"] = f"https://wa.me/?text={text}%20{target_url}"
     elif platform == "email":
         subject = f"Event Recommendation: {event_title}"
-        body = f"Hi! I thought you might be interested in this event:\n\n{event_title}"
-        if event_venue:
-            body += f"\nVenue: {event_venue}"
-        if event_city:
-            body += f"\nCity: {event_city}"
-        if event_date:
-            body += f"\nDate: {event_date}"
-        if event_url:
-            body += f"\nMore info: {event_url}"
+        body = _build_email_body(event_title, event_venue, event_city, event_date, event_url)
         share_urls["email"] = f"mailto:?subject={subject}&body={body}"
     
     return share_urls
@@ -2108,6 +2118,42 @@ def delete_itinerary(itinerary_id):
         return error_response(str(e), 500)
 
 
+def _parse_itinerary_item_dates(date, time):
+    """Parse date and time for itinerary item with validation."""
+    parsed_date = None
+    parsed_time = None
+    
+    if date:
+        try:
+            parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
+        except ValueError:
+            return None, None, error_response("Invalid date format. Use YYYY-MM-DD", 400)
+    
+    if time:
+        try:
+            parsed_time = datetime.strptime(time, "%H:%M").time()
+        except ValueError:
+            return None, None, error_response("Invalid time format. Use HH:MM", 400)
+    
+    return parsed_date, parsed_time, None
+
+
+def _extract_itinerary_item_data(data):
+    """Extract and sanitize itinerary item data from request."""
+    return {
+        "item_type": (data.get("item_type") or "").strip(),
+        "title": (data.get("title") or "").strip(),
+        "description": (data.get("description") or "").strip(),
+        "date": data.get("date"),
+        "time": data.get("time"),
+        "location": (data.get("location") or "").strip(),
+        "price": data.get("price"),
+        "url": (data.get("url") or "").strip(),
+        "image_url": (data.get("image_url") or "").strip(),
+        "order_index": data.get("order_index", 0)
+    }
+
+
 @bp.route("/itineraries/<int:itinerary_id>/items", methods=["POST"])
 @limiter.limit("20/minute")
 def add_itinerary_item(itinerary_id):
@@ -2116,52 +2162,33 @@ def add_itinerary_item(itinerary_id):
         itinerary = Itinerary.query.get_or_404(itinerary_id)
         data = request.get_json() or {}
         
-        # Coalesce possible nulls to empty strings before stripping to avoid AttributeError
-        item_type = (data.get("item_type") or "").strip()
-        title = (data.get("title") or "").strip()
-        description = (data.get("description") or "").strip()
-        date = data.get("date")
-        time = data.get("time")
-        location = (data.get("location") or "").strip()
-        price = data.get("price")
-        url = (data.get("url") or "").strip()
-        image_url = (data.get("image_url") or "").strip()
-        order_index = data.get("order_index", 0)
+        # Extract and validate data
+        item_data = _extract_itinerary_item_data(data)
         
-        if not item_type:
+        if not item_data["item_type"]:
             return error_response("item_type is required", 400)
         
-        if not title:
+        if not item_data["title"]:
             return error_response("title is required", 400)
         
         # Parse date and time
-        parsed_date = None
-        parsed_time = None
+        parsed_date, parsed_time, date_error = _parse_itinerary_item_dates(item_data["date"], item_data["time"])
+        if date_error:
+            return date_error
         
-        if date:
-            try:
-                parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
-            except ValueError:
-                return error_response("Invalid date format. Use YYYY-MM-DD", 400)
-        
-        if time:
-            try:
-                parsed_time = datetime.strptime(time, "%H:%M").time()
-            except ValueError:
-                return error_response("Invalid time format. Use HH:MM", 400)
-        
+        # Create item
         item = ItineraryItem(
             itinerary_id=itinerary_id,
-            item_type=item_type,
-            title=title,
-            description=description,
+            item_type=item_data["item_type"],
+            title=item_data["title"],
+            description=item_data["description"],
             date=parsed_date,
             time=parsed_time,
-            location=location,
-            price=price,
-            url=url,
-            image_url=image_url,
-            order_index=order_index
+            location=item_data["location"],
+            price=item_data["price"],
+            url=item_data["url"],
+            image_url=item_data["image_url"],
+            order_index=item_data["order_index"]
         )
         
         db.session.add(item)
@@ -2178,6 +2205,49 @@ def add_itinerary_item(itinerary_id):
         return error_response(str(e), 500)
 
 
+def _update_itinerary_item_basic_fields(item, data):
+    """Update basic text fields of itinerary item."""
+    if "title" in data:
+        item.title = data["title"].strip()
+    if "description" in data:
+        item.description = data["description"].strip()
+    if "location" in data:
+        item.location = data["location"].strip()
+    if "url" in data:
+        item.url = data["url"].strip()
+    if "image_url" in data:
+        item.image_url = data["image_url"].strip()
+    if "price" in data:
+        item.price = data["price"]
+    if "status" in data:
+        item.status = data["status"]
+    if "order_index" in data:
+        item.order_index = data["order_index"]
+
+
+def _update_itinerary_item_dates(item, data):
+    """Update date and time fields of itinerary item with validation."""
+    if "date" in data:
+        if data["date"]:
+            try:
+                item.date = datetime.strptime(data["date"], "%Y-%m-%d").date()
+            except ValueError:
+                return error_response("Invalid date format. Use YYYY-MM-DD", 400)
+        else:
+            item.date = None
+    
+    if "time" in data:
+        if data["time"]:
+            try:
+                item.time = datetime.strptime(data["time"], "%H:%M").time()
+            except ValueError:
+                return error_response("Invalid time format. Use HH:MM", 400)
+        else:
+            item.time = None
+    
+    return None
+
+
 @bp.route("/itineraries/<int:itinerary_id>/items/<int:item_id>", methods=["PUT"])
 def update_itinerary_item(itinerary_id, item_id):
     """Update an itinerary item"""
@@ -2185,48 +2255,13 @@ def update_itinerary_item(itinerary_id, item_id):
         item = ItineraryItem.query.filter_by(id=item_id, itinerary_id=itinerary_id).first_or_404()
         data = request.get_json() or {}
         
-        # Update fields if provided
-        if "title" in data:
-            item.title = data["title"].strip()
+        # Update basic fields
+        _update_itinerary_item_basic_fields(item, data)
         
-        if "description" in data:
-            item.description = data["description"].strip()
-        
-        if "date" in data:
-            if data["date"]:
-                try:
-                    item.date = datetime.strptime(data["date"], "%Y-%m-%d").date()
-                except ValueError:
-                    return error_response("Invalid date format. Use YYYY-MM-DD", 400)
-            else:
-                item.date = None
-        
-        if "time" in data:
-            if data["time"]:
-                try:
-                    item.time = datetime.strptime(data["time"], "%H:%M").time()
-                except ValueError:
-                    return error_response("Invalid time format. Use HH:MM", 400)
-            else:
-                item.time = None
-        
-        if "location" in data:
-            item.location = data["location"].strip()
-        
-        if "price" in data:
-            item.price = data["price"]
-        
-        if "url" in data:
-            item.url = data["url"].strip()
-        
-        if "image_url" in data:
-            item.image_url = data["image_url"].strip()
-        
-        if "status" in data:
-            item.status = data["status"]
-        
-        if "order_index" in data:
-            item.order_index = data["order_index"]
+        # Update dates with validation
+        date_error = _update_itinerary_item_dates(item, data)
+        if date_error:
+            return date_error
         
         db.session.commit()
         
