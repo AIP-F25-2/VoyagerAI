@@ -32,6 +32,51 @@ class HotelCSVLoader:
                 except Exception as e:
                     print(f"Error loading {csv_file}: {e}")
     
+    def _extract_rating(self, rating_text: str) -> Optional[float]:
+        """Extract numeric rating from text."""
+        if not rating_text:
+            return None
+        rating_match = re.search(r'(\d+\.?\d*)', rating_text)
+        if rating_match:
+            return float(rating_match.group(1))
+        return None
+
+    def _extract_review_count(self, reviews_text: str) -> int:
+        """Extract review count from text."""
+        if not reviews_text:
+            return 0
+        review_match = re.search(r'(\d+(?:,\d+)*)\s*reviews?', reviews_text)
+        if review_match:
+            return int(review_match.group(1).replace(',', ''))
+        return 0
+
+    def _extract_city_from_location(self, location: str) -> str:
+        """Extract city name from location string."""
+        if not location:
+            return "Unknown"
+        
+        # Try to extract city from location string
+        # Pattern: "District, City (District)" or "City" or "District, City"
+        city_match = re.search(r',\s*([A-Za-z\s]+?)(?:\s*\([^)]+\))?$', location)
+        if city_match:
+            return city_match.group(1).strip()
+        
+        # Fallback: look for common city patterns
+        common_cities = [
+            "Toronto", "Mumbai", "Delhi", "Bangalore", "Chennai", "Kolkata",
+            "Hyderabad", "Pune", "Ahmedabad", "Jaipur", "London", "Paris",
+            "Berlin", "Rome", "Amsterdam", "Madrid", "Vienna", "Prague",
+            "Barcelona", "Munich", "Zurich", "Geneva", "Brussels", "Copenhagen",
+            "Stockholm", "Oslo", "Helsinki", "Dublin", "Edinburgh", "Glasgow"
+        ]
+        
+        location_lower = location.lower()
+        for city in common_cities:
+            if city.lower() in location_lower:
+                return city
+        
+        return "Unknown"
+
     def _parse_hotel_row(self, row: Dict[str, str]) -> Optional[Dict[str, Any]]:
         """Parse a single hotel row from CSV"""
         try:
@@ -45,39 +90,9 @@ class HotelCSVLoader:
             price_text = row.get('Price', '').strip()
             url = row.get('URL', '').strip()
             
-            # Extract rating from text like "Scored 8.8\n8.8\nExcellent\n7,713 reviews"
-            rating = None
-            if rating_text:
-                # Look for numeric rating in the text
-                rating_match = re.search(r'(\d+\.?\d*)', rating_text)
-                if rating_match:
-                    rating = float(rating_match.group(1))
-            
-            # Extract review count
-            review_count = 0
-            if reviews_text:
-                review_match = re.search(r'(\d+(?:,\d+)*)\s*reviews?', reviews_text)
-                if review_match:
-                    review_count = int(review_match.group(1).replace(',', ''))
-            
-            # Extract city from location
-            city = "Unknown"
-            if location:
-                # Try to extract city from location string
-                # Pattern: "District, City (District)" or "City" or "District, City"
-                city_match = re.search(r',\s*([A-Za-z\s]+?)(?:\s*\([^)]+\))?$', location)
-                if city_match:
-                    city = city_match.group(1).strip()
-                else:
-                    # Fallback: look for common city patterns
-                    city_patterns = [
-                        r'\b(Toronto|Mumbai|Delhi|Bangalore|Chennai|Kolkata|Hyderabad|Pune|Ahmedabad|Jaipur|London|Paris|Berlin|Rome|Amsterdam|Madrid|Vienna|Prague|Barcelona|Munich|Zurich|Geneva|Brussels|Copenhagen|Stockholm|Oslo|Helsinki|Dublin|Edinburgh|Glasgow|Manchester|Birmingham|Liverpool|Leeds|Sheffield|Newcastle|Nottingham|Leicester|Coventry|Bradford|Cardiff|Belfast|Southampton|Portsmouth|Plymouth|Exeter|Bristol|Bath|Oxford|Cambridge|Canterbury|Norwich|Ipswich|Colchester|Chelmsford|Southend|Basildon|Maidstone|Gillingham|Chatham|Rochester|Dartford|Gravesend|Sevenoaks|Tunbridge Wells|Tonbridge|Ashford|Folkestone|Dover|Canterbury|Margate|Ramsgate|Broadstairs|Deal|Sandwich|Faversham|Whitstable|Herne Bay|Birchington|Westgate|Cliftonville|Manston|Ramsgate|Broadstairs|Margate|Cliftonville|Westgate|Birchington|Herne Bay|Whitstable|Faversham|Sandwich|Deal|Dover|Folkestone|Ashford|Tonbridge|Tunbridge Wells|Sevenoaks|Gravesend|Dartford|Rochester|Chatham|Gillingham|Maidstone|Basildon|Southend|Chelmsford|Colchester|Ipswich|Norwich|Canterbury|Cambridge|Oxford|Bath|Bristol|Exeter|Plymouth|Portsmouth|Southampton|Belfast|Cardiff|Bradford|Coventry|Leicester|Nottingham|Newcastle|Sheffield|Leeds|Liverpool|Birmingham|Manchester|Glasgow|Edinburgh|Dublin|Helsinki|Oslo|Stockholm|Copenhagen|Brussels|Geneva|Zurich|Munich|Barcelona|Prague|Vienna|Madrid|Amsterdam|Rome|Berlin|Paris|London|Jaipur|Ahmedabad|Pune|Hyderabad|Kolkata|Chennai|Bangalore|Delhi|Mumbai)\b'
-                    ]
-                    for pattern in city_patterns:
-                        city_match = re.search(pattern, location, re.IGNORECASE)
-                        if city_match:
-                            city = city_match.group(1).strip()
-                            break
+            rating = self._extract_rating(rating_text)
+            review_count = self._extract_review_count(reviews_text)
+            city = self._extract_city_from_location(location)
             
             return {
                 "id": f"hotel_{len(self.hotels_data)}",

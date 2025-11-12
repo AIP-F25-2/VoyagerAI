@@ -218,6 +218,83 @@ class ElasticsearchService:
                 indexed += 1
         return indexed
     
+    def _build_text_search_clause(self, query: str) -> Dict[str, Any]:
+        """Build text search clause for Elasticsearch query."""
+        return {
+            "multi_match": {
+                "query": query,
+                "fields": ["name^3", "description^2", "venue", "city"],
+                "type": "best_fields",
+                "fuzziness": "AUTO"
+            }
+        }
+
+    def _build_city_filter(self, city: str) -> Dict[str, Any]:
+        """Build city filter clause for Elasticsearch query."""
+        return {
+            "bool": {
+                "should": [
+                    {"match": {"city.keyword": city}},
+                    {"match": {"city": city}},
+                    {"wildcard": {"city": f"*{city.lower()}*"}}
+                ],
+                "minimum_should_match": 1
+            }
+        }
+
+    def _build_date_range_filter(self, date_from: Optional[str], date_to: Optional[str]) -> Dict[str, Any]:
+        """Build date range filter clause."""
+        date_range = {}
+        if date_from:
+            date_range["gte"] = date_from
+        if date_to:
+            date_range["lte"] = date_to
+        return {"range": {"date": date_range}}
+
+    def _build_price_range_filter(self, price_min: Optional[float], price_max: Optional[float]) -> Dict[str, Any]:
+        """Build price range filter clause."""
+        price_range = {}
+        if price_min is not None:
+            price_range["gte"] = price_min
+        if price_max is not None:
+            price_range["lte"] = price_max
+        return {
+            "bool": {
+                "should": [
+                    {"range": {"price_min": price_range}},
+                    {"range": {"price_max": price_range}}
+                ],
+                "minimum_should_match": 1
+            }
+        }
+
+    def _build_es_query(self, must_clauses: List[Dict], filter_clauses: List[Dict]) -> Dict[str, Any]:
+        """Build final Elasticsearch query."""
+        if not must_clauses and not filter_clauses:
+            return {"match_all": {}}
+        
+        es_query = {"bool": {}}
+        if must_clauses:
+            es_query["bool"]["must"] = must_clauses
+        if filter_clauses:
+            es_query["bool"]["filter"] = filter_clauses
+        return es_query
+
+    def _build_sort_clause(self, sort: str) -> List[Dict[str, Any]]:
+        """Build sort clause for Elasticsearch query."""
+        sort_clause = []
+        if sort == "date_asc":
+            sort_clause.append({"date": {"order": "asc"}})
+        elif sort == "date_desc":
+            sort_clause.append({"date": {"order": "desc"}})
+        elif sort == "price_asc":
+            sort_clause.append({"price_min": {"order": "asc", "missing": "_last"}})
+        elif sort == "price_desc":
+            sort_clause.append({"price_max": {"order": "desc", "missing": "_last"}})
+        else:
+            sort_clause.append({"date": {"order": "asc"}})
+        return sort_clause
+
     def search_events(
         self,
         query: Optional[str] = None,
@@ -247,108 +324,31 @@ class ElasticsearchService:
             return {"events": [], "total": 0, "page": page, "page_size": page_size}
         
         try:
-            # Build query
+            # Build query clauses
             must_clauses = []
             filter_clauses = []
             
-            # Text search
             if query:
-                must_clauses.append({
-                    "multi_match": {
-                        "query": query,
-                        "fields": ["name^3", "description^2", "venue", "city"],
-                        "type": "best_fields",
-                        "fuzziness": "AUTO"
-                    }
-                })
+                must_clauses.append(self._build_text_search_clause(query))
             
-            # City filter - use both exact match and text search for flexibility
             if city:
-                filter_clauses.append({
-                    "bool": {
-                        "should": [
-                            {"match": {"city.keyword": city}},  # Exact match
-                            {"match": {"city": city}},  # Text match (partial)
-                            {"wildcard": {"city": f"*{city.lower()}*"}}  # Wildcard match
-                        ],
-                        "minimum_should_match": 1
-                    }
-                })
+                filter_clauses.append(self._build_city_filter(city))
             
-            # Category filter
             if category:
-                filter_clauses.append({
-                    "term": {
-                        "category": category.lower()
-                    }
-                })
+                filter_clauses.append({"term": {"category": category.lower()}})
             
-            # Date range filter
             if date_from or date_to:
-                date_range = {}
-                if date_from:
-                    date_range["gte"] = date_from
-                if date_to:
-                    date_range["lte"] = date_to
-                filter_clauses.append({
-                    "range": {
-                        "date": date_range
-                    }
-                })
+                filter_clauses.append(self._build_date_range_filter(date_from, date_to))
             
-            # Price range filter
             if price_min is not None or price_max is not None:
-                price_range = {}
-                if price_min is not None:
-                    price_range["gte"] = price_min
-                if price_max is not None:
-                    price_range["lte"] = price_max
-                # Check both price_min and price_max fields
-                filter_clauses.append({
-                    "bool": {
-                        "should": [
-                            {"range": {"price_min": price_range}},
-                            {"range": {"price_max": price_range}}
-                        ],
-                        "minimum_should_match": 1
-                    }
-                })
+                filter_clauses.append(self._build_price_range_filter(price_min, price_max))
             
-            # Source filter
             if source:
-                filter_clauses.append({
-                    "term": {
-                        "source": source.lower()
-                    }
-                })
+                filter_clauses.append({"term": {"source": source.lower()}})
             
-            # Build final query
-            es_query = {
-                "bool": {}
-            }
-            
-            if must_clauses:
-                es_query["bool"]["must"] = must_clauses
-            if filter_clauses:
-                es_query["bool"]["filter"] = filter_clauses
-            
-            # If no clauses, match all
-            if not must_clauses and not filter_clauses:
-                es_query = {"match_all": {}}
-            
-            # Build sort
-            sort_clause = []
-            if sort == "date_asc":
-                sort_clause.append({"date": {"order": "asc"}})
-            elif sort == "date_desc":
-                sort_clause.append({"date": {"order": "desc"}})
-            elif sort == "price_asc":
-                sort_clause.append({"price_min": {"order": "asc", "missing": "_last"}})
-            elif sort == "price_desc":
-                sort_clause.append({"price_max": {"order": "desc", "missing": "_last"}})
-            else:
-                # Default: date ascending
-                sort_clause.append({"date": {"order": "asc"}})
+            # Build final query and sort
+            es_query = self._build_es_query(must_clauses, filter_clauses)
+            sort_clause = self._build_sort_clause(sort)
             
             # Execute search
             from_index = (page - 1) * page_size

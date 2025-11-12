@@ -209,6 +209,104 @@ Only return the JSON array, no other text."""
             logger.error(f"Error getting enhanced recommendations: {e}")
             return events[:limit]
     
+    def _extract_city_from_message(self, message: str) -> Optional[str]:
+        """Extract city name from message if mentioned."""
+        message_lower = message.lower()
+        common_cities = [
+            "toronto", "berlin", "vienna", "budapest", "barcelona", "madrid",
+            "rome", "paris", "london", "amsterdam", "mumbai", "delhi", "bangalore"
+        ]
+        for city in common_cities:
+            if city in message_lower:
+                return city
+        return None
+
+    def _is_event_query(self, message: str) -> bool:
+        """Check if message is asking about events."""
+        message_lower = message.lower()
+        event_keywords = [
+            "event", "concert", "show", "weekend", "this week", "tonight",
+            "today", "tomorrow", "sports", "theater", "festival", "music"
+        ]
+        return any(keyword in message_lower for keyword in event_keywords)
+
+    def _determine_date_range(self, message: str) -> tuple:
+        """Determine date range from message query."""
+        from datetime import datetime, timedelta
+        today = datetime.now().date()
+        message_lower = message.lower()
+        
+        if "weekend" in message_lower or "this weekend" in message_lower:
+            days_until_saturday = (5 - today.weekday()) % 7
+            if days_until_saturday == 0 and today.weekday() < 5:
+                days_until_saturday = 7
+            saturday = today + timedelta(days=days_until_saturday)
+            sunday = saturday + timedelta(days=1)
+            return saturday, sunday
+        elif "this week" in message_lower:
+            return today, today + timedelta(days=7)
+        elif "tonight" in message_lower or "today" in message_lower:
+            return today, today
+        elif "tomorrow" in message_lower:
+            tomorrow = today + timedelta(days=1)
+            return tomorrow, tomorrow
+        else:
+            return today, today + timedelta(days=30)
+
+    def _fetch_events_for_chat(self, date_from, date_to, city_mentioned: Optional[str]) -> List[Dict]:
+        """Fetch events from database for chat query."""
+        try:
+            from app.models import Event
+            db_query = Event.query.filter(Event.date >= date_from)
+            if date_to:
+                db_query = db_query.filter(Event.date <= date_to)
+            if city_mentioned:
+                db_query = db_query.filter(Event.city.ilike(f"%{city_mentioned}%"))
+            
+            events = db_query.order_by(Event.date).limit(20).all()
+            
+            events_data = []
+            for event in events:
+                events_data.append({
+                    "title": event.title,
+                    "date": event.date.isoformat() if event.date else None,
+                    "time": event.time.strftime("%H:%M") if event.time else None,
+                    "venue": event.venue or "TBA",
+                    "city": event.city or "Unknown",
+                    "url": event.url
+                })
+            
+            logger.info(f"Found {len(events_data)} events for chat query")
+            return events_data
+        except Exception as e:
+            logger.error(f"Error fetching events for chat: {e}")
+            return []
+
+    def _build_chat_messages(self, system_prompt: str, user_context: Optional[Dict],
+                            events_data: List[Dict], conversation_history: Optional[List[Dict]],
+                            message: str) -> List[Dict]:
+        """Build messages list for LLM chat."""
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        if user_context and user_context.get("favorites"):
+            context_msg = f"User's saved favorites: {json.dumps(user_context['favorites'][:5], indent=2)}"
+            messages.append({"role": "system", "content": context_msg})
+        
+        if events_data:
+            events_context = f"""Here are real events from our database that match the user's query:
+
+{json.dumps(events_data[:15], indent=2)}
+
+Use this information to give specific, helpful recommendations. Mention event names, dates, venues, and cities when relevant."""
+            messages.append({"role": "system", "content": events_context})
+        
+        if conversation_history:
+            for msg in conversation_history[-10:]:
+                messages.append(msg)
+        
+        messages.append({"role": "user", "content": message})
+        return messages
+
     def chat(
         self, 
         message: str, 
@@ -229,75 +327,12 @@ Only return the JSON array, no other text."""
                 user_context = self.get_user_context(user_email)
             
             # Detect if user is asking about events and fetch real data
-            message_lower = message.lower()
             events_data = []
-            city_mentioned = None
+            city_mentioned = self._extract_city_from_message(message)
             
-            # Extract city from message (common cities)
-            common_cities = ["toronto", "berlin", "vienna", "budapest", "barcelona", "madrid", 
-                           "rome", "paris", "london", "amsterdam", "mumbai", "delhi", "bangalore"]
-            for city in common_cities:
-                if city in message_lower:
-                    city_mentioned = city
-                    break
-            
-            # Check if asking about events (weekend, this week, events, concerts, etc.)
-            event_keywords = ["event", "concert", "show", "weekend", "this week", "tonight", 
-                            "today", "tomorrow", "sports", "theater", "festival", "music"]
-            is_event_query = any(keyword in message_lower for keyword in event_keywords)
-            
-            if is_event_query:
-                try:
-                    from datetime import datetime, timedelta
-                    today = datetime.now().date()
-                    
-                    # Determine date range based on query
-                    date_from = today
-                    date_to = None
-                    
-                    if "weekend" in message_lower or "this weekend" in message_lower:
-                        # Get this weekend (Saturday and Sunday)
-                        days_until_saturday = (5 - today.weekday()) % 7
-                        if days_until_saturday == 0 and today.weekday() < 5:
-                            days_until_saturday = 7
-                        saturday = today + timedelta(days=days_until_saturday)
-                        sunday = saturday + timedelta(days=1)
-                        date_from = saturday
-                        date_to = sunday
-                    elif "this week" in message_lower:
-                        date_to = today + timedelta(days=7)
-                    elif "tonight" in message_lower or "today" in message_lower:
-                        date_to = today
-                    elif "tomorrow" in message_lower:
-                        date_from = today + timedelta(days=1)
-                        date_to = date_from
-                    else:
-                        date_to = today + timedelta(days=30)  # Next month
-                    
-                    # Query database for events
-                    # Note: This is called from Flask route, so app context should be available
-                    db_query = Event.query.filter(Event.date >= date_from)
-                    if date_to:
-                        db_query = db_query.filter(Event.date <= date_to)
-                    if city_mentioned:
-                        db_query = db_query.filter(Event.city.ilike(f"%{city_mentioned}%"))
-                    
-                    events = db_query.order_by(Event.date).limit(20).all()
-                    
-                    for event in events:
-                        events_data.append({
-                            "title": event.title,
-                            "date": event.date.isoformat() if event.date else None,
-                            "time": event.time.strftime("%H:%M") if event.time else None,
-                            "venue": event.venue or "TBA",
-                            "city": event.city or "Unknown",
-                            "url": event.url
-                        })
-                    
-                    logger.info(f"Found {len(events_data)} events for chat query")
-                except Exception as e:
-                    logger.error(f"Error fetching events for chat: {e}")
-                    events_data = []
+            if self._is_event_query(message):
+                date_from, date_to = self._determine_date_range(message)
+                events_data = self._fetch_events_for_chat(date_from, date_to, city_mentioned)
             
             # Build system prompt
             system_prompt = """You are VoyagerAI, a helpful travel and event planning assistant. 
@@ -312,32 +347,11 @@ You can:
 
 Be friendly, concise, and helpful. When you have real event data, use it to give specific recommendations."""
 
-            # Build messages
-            messages = [{"role": "system", "content": system_prompt}]
+            # Build messages and get response
+            messages = self._build_chat_messages(
+                system_prompt, user_context, events_data, conversation_history, message
+            )
             
-            # Add user context if available
-            if user_context and user_context["favorites"]:
-                context_msg = f"User's saved favorites: {json.dumps(user_context['favorites'][:5], indent=2)}"
-                messages.append({"role": "system", "content": context_msg})
-            
-            # Add real events data if available
-            if events_data:
-                events_context = f"""Here are real events from our database that match the user's query:
-
-{json.dumps(events_data[:15], indent=2)}
-
-Use this information to give specific, helpful recommendations. Mention event names, dates, venues, and cities when relevant."""
-                messages.append({"role": "system", "content": events_context})
-            
-            # Add conversation history
-            if conversation_history:
-                for msg in conversation_history[-10:]:  # Last 10 messages
-                    messages.append(msg)
-            
-            # Add current message
-            messages.append({"role": "user", "content": message})
-            
-            # Get response
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
