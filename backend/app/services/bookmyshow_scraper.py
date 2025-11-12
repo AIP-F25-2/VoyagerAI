@@ -26,7 +26,8 @@ def consent(page):
             loc = page.locator(sel).first
             if loc.is_visible(timeout=700):
                 loc.click(); time.sleep(0.2); return
-        except: pass
+        except (TimeoutError, AttributeError, TypeError):
+            pass
 
 def scroll_until_stable(page, max_loops=18, pause=0.6):
     last = 0; stable = 0
@@ -34,7 +35,7 @@ def scroll_until_stable(page, max_loops=18, pause=0.6):
         page.mouse.wheel(0, 2400); time.sleep(pause + random.uniform(0.05, 0.25))
         try:
             h = page.evaluate("document.body.scrollHeight")
-        except:
+        except (TimeoutError, AttributeError, TypeError):
             break
         if h == last:
             stable += 1
@@ -42,20 +43,48 @@ def scroll_until_stable(page, max_loops=18, pause=0.6):
         else:
             stable = 0; last = h
 
+def _normalize_link(href):
+    """Normalize a link URL."""
+    if not href:
+        return None
+    if href.startswith("/"):
+        href = BASE + href
+    if "/movies/" in href:
+        return None
+    return href.split("?")[0]
+
+
+def _get_link_count(loc):
+    """Safely get the count of locator elements."""
+    try:
+        return loc.count()
+    except (TimeoutError, AttributeError, TypeError):
+        return 0
+
+
+def _extract_link_from_locator(loc, index):
+    """Extract and normalize a link from a locator at a specific index."""
+    try:
+        href = loc.nth(index).get_attribute("href")
+        return _normalize_link(href)
+    except (TimeoutError, AttributeError, TypeError, IndexError):
+        return None
+
+
 def collect_links(page):
+    """Collect event links from the page."""
     links = set()
-    for css in ["a[href*='/events/']", "a[href*='/activities/']", "a[href*='/buytickets/']"]:
+    css_selectors = ["a[href*='/events/']", "a[href*='/activities/']", "a[href*='/buytickets/']"]
+    
+    for css in css_selectors:
         loc = page.locator(css)
-        try: n = loc.count()
-        except: n = 0
+        n = _get_link_count(loc)
+        
         for i in range(min(n, 4000)):
-            try:
-                href = loc.nth(i).get_attribute("href")
-                if not href: continue
-                if href.startswith("/"): href = BASE + href
-                if "/movies/" in href: continue
-                links.add(href.split("?")[0])
-            except: pass
+            normalized_link = _extract_link_from_locator(loc, i)
+            if normalized_link:
+                links.add(normalized_link)
+    
     return sorted(links)
 
 def first(v):
@@ -91,27 +120,38 @@ def parse_jsonld_event(obj):
 def parse_event(page):
     row = {"title": None, "date": None, "time": None, "venue": None, "place": None, "price": None}
     scripts = page.locator("script[type='application/ld+json']")
-    try: n = scripts.count()
-    except: n = 0
+    try:
+        n = scripts.count()
+    except (TimeoutError, AttributeError, TypeError):
+        n = 0
+    
     for i in range(n):
         try:
             data = scripts.nth(i).inner_text()
-            if not data: continue
+            if not data:
+                continue
             data = json.loads(data)
-        except:
+        except (json.JSONDecodeError, AttributeError, TypeError):
             continue
+        
         items = data if isinstance(data, list) else [data]
         for it in items:
             if isinstance(it, dict):
                 t = it.get("@type")
                 if t == "Event" or (isinstance(t, list) and "Event" in t):
                     got = parse_jsonld_event(it)
-                    for k,v in got.items():
-                        if v and not row[k]: row[k] = v
-        if row["title"]: break
+                    for k, v in got.items():
+                        if v and not row[k]:
+                            row[k] = v
+        if row["title"]:
+            break
+    
     if not row["title"]:
-        try: row["title"] = (page.title() or "").strip() or None
-        except: pass
+        try:
+            row["title"] = (page.title() or "").strip() or None
+        except (TimeoutError, AttributeError, TypeError):
+            pass
+    
     return row
 
 def retry_goto(page, url, attempts=3, wait="domcontentloaded", timeout=60000):
