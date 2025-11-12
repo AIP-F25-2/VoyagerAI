@@ -1,7 +1,7 @@
 import csv
 import os
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import re
 
 class CSVEventLoader:
