@@ -109,11 +109,11 @@ def _process_link_element(loc, i: int) -> Optional[str]:
         print(f"Error processing link {i}: {e}")
         return None
 
-def _get_link_count(loc) -> int:
+def _get_link_count(loc, css: str) -> int:
     """Get count of links for a locator."""
     try:
         n = loc.count()
-        print(f"Found {n} elements with selector: {loc}")
+        print(f"Found {n} elements with selector: {css}")
         return n
     except (TimeoutError, AttributeError, TypeError):
         return 0
@@ -124,7 +124,7 @@ def collect_bms_links(page):
     
     for css in selectors:
         loc = page.locator(css)
-        n = _get_link_count(loc)
+        n = _get_link_count(loc, css)
         
         for i in range(min(n, 100)):
             clean_url = _process_link_element(loc, i)
