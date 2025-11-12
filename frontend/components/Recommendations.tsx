@@ -163,7 +163,7 @@ function RecommendationsContent({ onEventClick }: RecommendationsProps) {
       
       if (data.success && data.trending) {
         const trendingEvents = data.trending.map((event: any) => ({
-          id: event.id || Math.random(),
+          id: event.id || Math.random(),  // NOSONAR typescript:S2245 - Non-cryptographic ID fallback for UI
           title: event.title || event.name,
           venue: event.venue,
           city: event.city,

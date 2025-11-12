@@ -45,7 +45,7 @@ export default function AIChat({ onClose, initialMessage }: AIChatProps) {
     if (!text || loading) return;
 
     const userMessage: Message = {
-      id: `user-${Date.now()}-${Math.random()}`,
+      id: `user-${Date.now()}-${Math.random()}`,  // NOSONAR typescript:S2245 - Non-cryptographic ID generation for UI
       role: "user",
       content: text,
       timestamp: new Date(),
@@ -71,7 +71,7 @@ export default function AIChat({ onClose, initialMessage }: AIChatProps) {
 
       if (data.success) {
         const assistantMessage: Message = {
-          id: `assistant-${Date.now()}-${Math.random()}`,
+          id: `assistant-${Date.now()}-${Math.random()}`,  // NOSONAR typescript:S2245 - Non-cryptographic ID generation for UI
           role: "assistant",
           content: data.message,
           timestamp: new Date(),
@@ -80,7 +80,7 @@ export default function AIChat({ onClose, initialMessage }: AIChatProps) {
       } else {
         setError(data.error || "Failed to get response");
         const errorMessage: Message = {
-          id: `error-${Date.now()}-${Math.random()}`,
+          id: `error-${Date.now()}-${Math.random()}`,  // NOSONAR typescript:S2245 - Non-cryptographic ID generation for UI
           role: "assistant",
           content: `Sorry, I encountered an error: ${data.error || "Unknown error"}. Please make sure OPENAI_API_KEY is configured.`,
           timestamp: new Date(),
@@ -91,7 +91,7 @@ export default function AIChat({ onClose, initialMessage }: AIChatProps) {
       const errorMsg = err instanceof Error ? err.message : "Network error";
       setError(errorMsg);
       const errorMessage: Message = {
-        id: `error-${Date.now()}-${Math.random()}`,
+        id: `error-${Date.now()}-${Math.random()}`,  // NOSONAR typescript:S2245 - Non-cryptographic ID generation for UI
         role: "assistant",
         content: `Sorry, I couldn't connect to the AI service. ${errorMsg}`,
         timestamp: new Date(),
@@ -157,7 +157,7 @@ export default function AIChat({ onClose, initialMessage }: AIChatProps) {
 
         {messages.map((msg) => (
           <div
-            key={msg.id || `${msg.role}-${msg.timestamp.getTime()}-${Math.random()}`}
+            key={msg.id || `${msg.role}-${msg.timestamp.getTime()}-${Math.random()}`}  // NOSONAR typescript:S2245 - Non-cryptographic key generation for React
             className={`${styles.message} ${
               msg.role === "user" ? styles.userMessage : styles.assistantMessage
             }`}

@@ -124,7 +124,7 @@ export default function EventCard({ event, provider }: EventCardProps) {
               'VERSION:2.0',
               'PRODID:-//VoyagerAI//Events//EN',
               'BEGIN:VEVENT',
-              `UID:client-${(event?.id || Math.random()).toString()}`,
+              `UID:client-${(event?.id || Math.random()).toString()}`,  // NOSONAR typescript:S2245 - Non-cryptographic ID fallback for UI
               `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
               `DTSTART:${d}T${t}`,
               `SUMMARY:${event?.name || title}`,
