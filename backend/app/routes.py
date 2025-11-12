@@ -31,177 +31,177 @@ def _parse_date_shortcuts(when):
         return None, None
     
     today = date.today()
-        if when == "tonight":
+    if when == "tonight":
         return today.isoformat(), today.isoformat()
-        elif when == "weekend":
-            days_ahead = (4 - today.weekday()) % 7  # Friday index 4
-            start = today + timedelta(days=days_ahead)
-            end = start + timedelta(days=2)
+    elif when == "weekend":
+        days_ahead = (4 - today.weekday()) % 7  # Friday index 4
+        start = today + timedelta(days=days_ahead)
+        end = start + timedelta(days=2)
         return start.isoformat(), end.isoformat()
-        elif when == "this_week":
-            end = today + timedelta(days=7)
+    elif when == "this_week":
+        end = today + timedelta(days=7)
         return today.isoformat(), end.isoformat()
-        elif when == "this_month":
-            end = today + timedelta(days=30)
+    elif when == "this_month":
+        end = today + timedelta(days=30)
         return today.isoformat(), end.isoformat()
     return None, None
 
 
 def _fetch_ticketmaster_events(query_param, city, limit):
     """Fetch events from Ticketmaster API."""
-        ticketmaster_events = []
-        try:
-            from .services.ticketmaster import fetch_events as fetch_ticketmaster
-            search_term = query_param or city or "Toronto"
-            today = datetime.utcnow().strftime("%Y-%m-%dT00:00:00Z")
-            
-            ticketmaster_data = fetch_ticketmaster(
-                query=search_term,
-                city=city,
-                start_date=today,
-                size=min(limit, 20)
-            )
-            
-            if ticketmaster_data and '_embedded' in ticketmaster_data:
-                raw_events = ticketmaster_data['_embedded']['events']
-                for i, event in enumerate(raw_events):
-                    if 'id' not in event or not event['id']:
-                        event['id'] = f"tm_{i}_{hash(event.get('name', ''))}"
+    ticketmaster_events = []
+    try:
+        from .services.ticketmaster import fetch_events as fetch_ticketmaster
+        search_term = query_param or city or "Toronto"
+        today = datetime.utcnow().strftime("%Y-%m-%dT00:00:00Z")
+        
+        ticketmaster_data = fetch_ticketmaster(
+            query=search_term,
+            city=city,
+            start_date=today,
+            size=min(limit, 20)
+        )
+        
+        if ticketmaster_data and '_embedded' in ticketmaster_data:
+            raw_events = ticketmaster_data['_embedded']['events']
+            for i, event in enumerate(raw_events):
+                if 'id' not in event or not event['id']:
+                    event['id'] = f"tm_{i}_{hash(event.get('name', ''))}"
                 if 'source' not in event:
                     event['source'] = 'ticketmaster'
-                ticketmaster_events = raw_events
-                print(f"✅ Ticketmaster: Found {len(ticketmaster_events)} real events")
-            else:
-                print("⚠️ Ticketmaster: No events found")
-        except Exception as e:
-            print(f"❌ Ticketmaster API Error: {e}")
+            ticketmaster_events = raw_events
+            print(f"✅ Ticketmaster: Found {len(ticketmaster_events)} real events")
+        else:
+            print("⚠️ Ticketmaster: No events found")
+    except Exception as e:
+        print(f"❌ Ticketmaster API Error: {e}")
 
     return ticketmaster_events
 
 
 def _fetch_eventbrite_events(city, query_param, date_from, date_to, limit):
     """Fetch events from Eventbrite database."""
-        eventbrite_events = []
+    eventbrite_events = []
+    try:
+        db_query = Event.query
+        if city:
+            db_query = db_query.filter(Event.city.ilike(f"%{city}%"))
+        if query_param:
+            db_query = db_query.filter(Event.title.ilike(f"%{query_param}%"))
+    
         try:
-            db_query = Event.query
-            if city:
-                db_query = db_query.filter(Event.city.ilike(f"%{city}%"))
-            if query_param:
-                db_query = db_query.filter(Event.title.ilike(f"%{query_param}%"))
-        
-            try:
-                if date_from:
-                    df = datetime.strptime(date_from, "%Y-%m-%d").date()
-                    db_query = db_query.filter(Event.date >= df)
-                if date_to:
-                    dt_ = datetime.strptime(date_to, "%Y-%m-%d").date()
-                    db_query = db_query.filter(Event.date <= dt_)
-            except Exception:
-                pass
+            if date_from:
+                df = datetime.strptime(date_from, "%Y-%m-%d").date()
+                db_query = db_query.filter(Event.date >= df)
+            if date_to:
+                dt_ = datetime.strptime(date_to, "%Y-%m-%d").date()
+                db_query = db_query.filter(Event.date <= dt_)
+        except Exception:
+            pass
 
-            events = db_query.order_by(Event.created_at.desc()).limit(limit).all()
-            
-            for i, event in enumerate(events):
-                formatted_event = {
-                    "id": f"eb_{event.id if hasattr(event, 'id') else i}_{hash(event.title)}",
+        events = db_query.order_by(Event.created_at.desc()).limit(limit).all()
+        
+        for i, event in enumerate(events):
+            formatted_event = {
+                "id": f"eb_{event.id if hasattr(event, 'id') else i}_{hash(event.title)}",
                 "name": event.title,
-                    "url": event.url,
-                    "dates": {
-                        "start": {
-                            "localDate": event.date.isoformat() if event.date else "2024-01-01",
-                            "localTime": event.time.strftime("%H:%M") if event.time else "19:00"
-                        }
-                    },
-                    "images": [{"url": "/placeholder.jpg"}],
-                    "_embedded": {
-                        "venues": [{
-                            "name": event.venue or "TBA",
-                            "city": {"name": event.city or "Unknown"}
-                        }]
-                    },
+                "url": event.url,
+                "dates": {
+                    "start": {
+                        "localDate": event.date.isoformat() if event.date else "2024-01-01",
+                        "localTime": event.time.strftime("%H:%M") if event.time else "19:00"
+                    }
+                },
+                "images": [{"url": "/placeholder.jpg"}],
+                "_embedded": {
+                    "venues": [{
+                        "name": event.venue or "TBA",
+                        "city": {"name": event.city or "Unknown"}
+                    }]
+                },
                 "priceRanges": [{"min": 0, "max": 100}] if event.price else None,
                 "source": "eventbrite"
-                }
-                eventbrite_events.append(formatted_event)
-            
-            print(f"✅ Eventbrite (DB): Found {len(eventbrite_events)} events")
-        except Exception as e:
-            print(f"❌ Eventbrite DB Error: {e}")
+            }
+            eventbrite_events.append(formatted_event)
+        
+        print(f"✅ Eventbrite (DB): Found {len(eventbrite_events)} events")
+    except Exception as e:
+        print(f"❌ Eventbrite DB Error: {e}")
 
     return eventbrite_events
 
 
 def _fetch_csv_events(query_param, city, limit):
     """Fetch events from CSV files."""
-        csv_events = []
-        try:
-            if query_param:
-                csv_events = csv_loader.get_events_by_query(query_param)
-                if not csv_events and city:
-                    csv_events = csv_loader.get_events_by_city(city)
-                if not csv_events:
-                    csv_events = csv_loader.load_all_csv_events()
-            else:
-                if city:
-                    csv_events = csv_loader.get_events_by_city(city)
-                if not csv_events:
-                    csv_events = csv_loader.load_all_csv_events()
-            
-            csv_events = csv_events[:limit]
-            print(f"✅ CSV Events: Found {len(csv_events)} events")
+    csv_events = []
+    try:
+        if query_param:
+            csv_events = csv_loader.get_events_by_query(query_param)
+            if not csv_events and city:
+                csv_events = csv_loader.get_events_by_city(city)
+            if not csv_events:
+                csv_events = csv_loader.load_all_csv_events()
+        else:
+            if city:
+                csv_events = csv_loader.get_events_by_city(city)
+            if not csv_events:
+                csv_events = csv_loader.load_all_csv_events()
+        
+        csv_events = csv_events[:limit]
+        print(f"✅ CSV Events: Found {len(csv_events)} events")
 
-            saved = _save_csv_events_to_db(csv_events)
-            if saved:
-                print(f"💾 Saved {saved} CSV events to database")
-        except Exception as e:
-            print(f"❌ CSV Events Error: {e}")
+        saved = _save_csv_events_to_db(csv_events)
+        if saved:
+            print(f"💾 Saved {saved} CSV events to database")
+    except Exception as e:
+        print(f"❌ CSV Events Error: {e}")
 
     return csv_events
 
 
 def _enrich_events_with_images(events):
     """Enrich events with images from Pixabay if missing."""
-        def with_image(ev):
-            if isinstance(ev.get("images"), list) and ev["images"]:
-                return ev
-            q = ev.get("name") or ev.get("title") or ""
-            img = search_pixabay_image(q) if q else None
-            if img:
-                ev["images"] = [{"url": img}]
+    def with_image(ev):
+        if isinstance(ev.get("images"), list) and ev["images"]:
             return ev
+        q = ev.get("name") or ev.get("title") or ""
+        img = search_pixabay_image(q) if q else None
+        if img:
+            ev["images"] = [{"url": img}]
+        return ev
     return [with_image(e) for e in events]
 
 
 def _apply_date_filters(ev_list, date_from, date_to):
     """Apply date filters to event list."""
-            if not (date_from or date_to):
-                return ev_list
-            filtered = []
-            for ev in ev_list:
-                d = (ev.get("dates") or {}).get("start", {}).get("localDate")
-                try:
-                    if not d:
-                        continue
-                    dval = datetime.strptime(d, "%Y-%m-%d").date()
-                    if date_from:
-                        df = datetime.strptime(date_from, "%Y-%m-%d").date()
-                        if dval < df:
-                            continue
-                    if date_to:
-                        dt_ = datetime.strptime(date_to, "%Y-%m-%d").date()
-                        if dval > dt_:
-                            continue
-                    filtered.append(ev)
-                except Exception:
+    if not (date_from or date_to):
+        return ev_list
+    filtered = []
+    for ev in ev_list:
+        d = (ev.get("dates") or {}).get("start", {}).get("localDate")
+        try:
+            if not d:
+                continue
+            dval = datetime.strptime(d, "%Y-%m-%d").date()
+            if date_from:
+                df = datetime.strptime(date_from, "%Y-%m-%d").date()
+                if dval < df:
                     continue
-            return filtered
+            if date_to:
+                dt_ = datetime.strptime(date_to, "%Y-%m-%d").date()
+                if dval > dt_:
+                    continue
+            filtered.append(ev)
+        except Exception:
+            continue
+    return filtered
 
 
 def _apply_provider_filter(ticketmaster_events, eventbrite_events, csv_events, provider):
     """Apply provider filter to event lists."""
-        if provider in {"ticketmaster", "tm"}:
+    if provider in {"ticketmaster", "tm"}:
         return ticketmaster_events, [], []
-        elif provider in {"eventbrite", "eb"}:
+    elif provider in {"eventbrite", "eb"}:
         return [], eventbrite_events, []
     elif provider == "csv":
         return [], [], csv_events
