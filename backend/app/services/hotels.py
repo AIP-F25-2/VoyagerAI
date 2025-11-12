@@ -50,8 +50,8 @@ class HotelCSVLoader:
         review_match = re.search(r'(\d{1,3}(?:,\d{3})*)\s*reviews?', reviews_text)
         if review_match:
             return int(review_match.group(1).replace(',', ''))
-        # Fallback for simple number without commas
-        simple_match = re.search(r'(\d+)\s*reviews?', reviews_text)
+        # Fallback for simple number without commas (bounded to prevent excessive backtracking)
+        simple_match = re.search(r'(\d{1,10})\s*reviews?', reviews_text)
         if simple_match:
             return int(simple_match.group(1))
         return 0

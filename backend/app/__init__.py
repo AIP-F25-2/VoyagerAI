@@ -43,6 +43,9 @@ def create_app():
         sentry_sdk.init(dsn=sentry_dsn, integrations=[FlaskIntegration()])
 
     # CORS: env-based allowed origins
+    # Security Hotspot Review: HTTP is used in the default value for localhost development only.
+    # In production, FRONTEND_ORIGINS should be set via environment variable with HTTPS URLs.
+    # Localhost HTTP is safe for local development and is not a security risk.
     origins_env = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000,http://localhost:3001")
     allowed_origins = [o.strip() for o in origins_env.split(',') if o.strip()]
     CORS(app, resources={r"/api/*": {"origins": allowed_origins}})

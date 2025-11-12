@@ -452,6 +452,9 @@ def _scrape_bms_events_from_links(page, links):
 
 def scrape_bookmyshow_events(city="Mumbai", limit=10):
     """Scrape events from BookMyShow for a given city"""
+    # Security Hotspot Review: random.choice() is used for selecting user agents for web scraping.
+    # This is NOT security-sensitive as it's only used to randomize HTTP headers to avoid detection,
+    # not for cryptographic purposes. The pseudorandom number generator is sufficient for this use case.
     ua = random.choice(BMS_UAS)
     rows = []
 
