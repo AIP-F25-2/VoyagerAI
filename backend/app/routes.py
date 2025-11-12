@@ -85,52 +85,62 @@ def _fetch_ticketmaster_events(query_param, city, limit):
     return ticketmaster_events
 
 
+def _build_eventbrite_query(city, query_param, date_from, date_to):
+    """Build database query for Eventbrite events with filters."""
+    db_query = Event.query
+    if city:
+        db_query = db_query.filter(Event.city.ilike(f"%{city}%"))
+    if query_param:
+        db_query = db_query.filter(Event.title.ilike(f"%{query_param}%"))
+    
+    try:
+        if date_from:
+            df = datetime.strptime(date_from, "%Y-%m-%d").date()
+            db_query = db_query.filter(Event.date >= df)
+        if date_to:
+            dt_ = datetime.strptime(date_to, "%Y-%m-%d").date()
+            db_query = db_query.filter(Event.date <= dt_)
+    except (ValueError, TypeError):
+        # Invalid date format, skip date filtering
+        pass
+    
+    return db_query
+
+
+def _format_eventbrite_event(event, index):
+    """Format a database Event object into Eventbrite API format."""
+    title_hash = hashlib.sha256(event.title.encode()).hexdigest()[:8]
+    return {
+        "id": f"eb_{event.id if hasattr(event, 'id') else index}_{title_hash}",
+        "name": event.title,
+        "url": event.url,
+        "dates": {
+            "start": {
+                "localDate": event.date.isoformat() if event.date else "2024-01-01",
+                "localTime": event.time.strftime("%H:%M") if event.time else "19:00"
+            }
+        },
+        "images": [{"url": "/placeholder.jpg"}],
+        "_embedded": {
+            "venues": [{
+                "name": event.venue or "TBA",
+                "city": {"name": event.city or "Unknown"}
+            }]
+        },
+        "priceRanges": [{"min": 0, "max": 100}] if event.price else None,
+        "source": "eventbrite"
+    }
+
+
 def _fetch_eventbrite_events(city, query_param, date_from, date_to, limit):
     """Fetch events from Eventbrite database."""
     eventbrite_events = []
     try:
-        db_query = Event.query
-        if city:
-            db_query = db_query.filter(Event.city.ilike(f"%{city}%"))
-        if query_param:
-            db_query = db_query.filter(Event.title.ilike(f"%{query_param}%"))
-    
-        try:
-            if date_from:
-                df = datetime.strptime(date_from, "%Y-%m-%d").date()
-                db_query = db_query.filter(Event.date >= df)
-            if date_to:
-                dt_ = datetime.strptime(date_to, "%Y-%m-%d").date()
-                db_query = db_query.filter(Event.date <= dt_)
-        except (ValueError, TypeError):
-            # Invalid date format, skip date filtering
-            pass
-
+        db_query = _build_eventbrite_query(city, query_param, date_from, date_to)
         events = db_query.order_by(Event.created_at.desc()).limit(limit).all()
         
         for i, event in enumerate(events):
-            # Use SHA256 for ID generation (non-cryptographic use, just for uniqueness)
-            title_hash = hashlib.sha256(event.title.encode()).hexdigest()[:8]
-            formatted_event = {
-                "id": f"eb_{event.id if hasattr(event, 'id') else i}_{title_hash}",
-                "name": event.title,
-                "url": event.url,
-                "dates": {
-                    "start": {
-                        "localDate": event.date.isoformat() if event.date else "2024-01-01",
-                        "localTime": event.time.strftime("%H:%M") if event.time else "19:00"
-                    }
-                },
-                "images": [{"url": "/placeholder.jpg"}],
-                "_embedded": {
-                    "venues": [{
-                        "name": event.venue or "TBA",
-                        "city": {"name": event.city or "Unknown"}
-                    }]
-                },
-                "priceRanges": [{"min": 0, "max": 100}] if event.price else None,
-                "source": "eventbrite"
-            }
+            formatted_event = _format_eventbrite_event(event, i)
             eventbrite_events.append(formatted_event)
         
         print(f"✅ Eventbrite (DB): Found {len(eventbrite_events)} events")
@@ -181,30 +191,42 @@ def _enrich_events_with_images(events):
     return [with_image(e) for e in events]
 
 
+def _parse_event_date(date_str):
+    """Parse event date string to date object."""
+    if not date_str:
+        return None
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+def _event_matches_date_filter(ev, date_from, date_to):
+    """Check if event matches date filter criteria."""
+    d = (ev.get("dates") or {}).get("start", {}).get("localDate")
+    dval = _parse_event_date(d)
+    if not dval:
+        return False
+    
+    if date_from:
+        df = _parse_event_date(date_from)
+        if df and dval < df:
+            return False
+    
+    if date_to:
+        dt_ = _parse_event_date(date_to)
+        if dt_ and dval > dt_:
+            return False
+    
+    return True
+
+
 def _apply_date_filters(ev_list, date_from, date_to):
     """Apply date filters to event list."""
     if not (date_from or date_to):
         return ev_list
-    filtered = []
-    for ev in ev_list:
-        d = (ev.get("dates") or {}).get("start", {}).get("localDate")
-        try:
-            if not d:
-                continue
-            dval = datetime.strptime(d, "%Y-%m-%d").date()
-            if date_from:
-                df = datetime.strptime(date_from, "%Y-%m-%d").date()
-                if dval < df:
-                    continue
-            if date_to:
-                dt_ = datetime.strptime(date_to, "%Y-%m-%d").date()
-                if dval > dt_:
-                    continue
-            filtered.append(ev)
-        except (ValueError, TypeError):
-            # Invalid date format, skip this event
-            continue
-    return filtered
+    
+    return [ev for ev in ev_list if _event_matches_date_filter(ev, date_from, date_to)]
 
 
 def _apply_provider_filter(ticketmaster_events, eventbrite_events, csv_events, provider):
@@ -216,6 +238,34 @@ def _apply_provider_filter(ticketmaster_events, eventbrite_events, csv_events, p
     elif provider == "csv":
         return [], [], csv_events
     return ticketmaster_events, eventbrite_events, csv_events
+
+
+def _get_source_filter(provider):
+    """Get Elasticsearch source filter from provider string."""
+    if provider in {"ticketmaster", "tm"}:
+        return "ticketmaster"
+    elif provider in {"eventbrite", "eb"}:
+        return "eventbrite"
+    elif provider == "csv":
+        return "csv"
+    return None
+
+
+def _categorize_es_events(es_events, source_filter):
+    """Categorize Elasticsearch events by source."""
+    es_ticketmaster = [e for e in es_events if e.get("source") == "ticketmaster"]
+    es_eventbrite = [e for e in es_events if e.get("source") == "eventbrite"]
+    es_csv = [e for e in es_events if e.get("source") == "csv"]
+    
+    if source_filter:
+        if source_filter == "ticketmaster":
+            es_eventbrite, es_csv = [], []
+        elif source_filter == "eventbrite":
+            es_ticketmaster, es_csv = [], []
+        elif source_filter == "csv":
+            es_ticketmaster, es_eventbrite = [], []
+    
+    return es_ticketmaster, es_eventbrite, es_csv
 
 
 def _search_with_elasticsearch(query_param, city, category, date_from, date_to, 
@@ -230,14 +280,7 @@ def _search_with_elasticsearch(query_param, city, category, date_from, date_to,
     try:
         price_min_float = float(price_min) if price_min else None
         price_max_float = float(price_max) if price_max else None
-        
-        source_filter = None
-        if provider in {"ticketmaster", "tm"}:
-            source_filter = "ticketmaster"
-        elif provider in {"eventbrite", "eb"}:
-            source_filter = "eventbrite"
-        elif provider == "csv":
-            source_filter = "csv"
+        source_filter = _get_source_filter(provider)
         
         es_results = es_service.search_events(
             query=query_param if query_param else None,
@@ -256,17 +299,7 @@ def _search_with_elasticsearch(query_param, city, category, date_from, date_to,
         if es_results["total"] > 0:
             print(f"🔍 Elasticsearch found {es_results['total']} events")
             es_events = es_results["events"]
-            es_ticketmaster = [e for e in es_events if e.get("source") == "ticketmaster"]
-            es_eventbrite = [e for e in es_events if e.get("source") == "eventbrite"]
-            es_csv = [e for e in es_events if e.get("source") == "csv"]
-            
-            if source_filter:
-                if source_filter == "ticketmaster":
-                    es_eventbrite, es_csv = [], []
-                elif source_filter == "eventbrite":
-                    es_ticketmaster, es_csv = [], []
-                elif source_filter == "csv":
-                    es_ticketmaster, es_eventbrite = [], []
+            es_ticketmaster, es_eventbrite, es_csv = _categorize_es_events(es_events, source_filter)
             
             return {
                 "ticketmaster": es_ticketmaster,
@@ -317,24 +350,13 @@ def _check_event_exists(title, url, date_str=None):
     return Event.query.filter(Event.title == title).first()
 
 
-def _parse_event_fields(ev):
-    """Parse and extract event fields from CSV event data."""
-    title = ev.get("name") or ""
-    url = ev.get("url") or None
-    
-    # Extract date and time
+def _extract_event_dates(ev):
+    """Extract and parse date/time from event data."""
     dates = ev.get("dates", {}) or {}
     start = dates.get("start", {}) or {}
     local_date = start.get("localDate")
     local_time = start.get("localTime")
     
-    # Extract venue and city
-    embedded = ev.get("_embedded", {}) or {}
-    venues = embedded.get("venues", [{}])
-    venue = venues[0].get("name") if venues else None
-    city = venues[0].get("city", {}).get("name") if venues else None
-    
-    # Parse dates
     parsed_date = None
     if local_date:
         try:
@@ -349,17 +371,39 @@ def _parse_event_fields(ev):
         except (ValueError, TypeError):
             pass
     
-    # Parse price
-    price_text = None
+    return parsed_date, parsed_time
+
+
+def _extract_event_location(ev):
+    """Extract venue and city from event data."""
+    embedded = ev.get("_embedded", {}) or {}
+    venues = embedded.get("venues", [{}])
+    venue = venues[0].get("name") if venues else None
+    city = venues[0].get("city", {}).get("name") if venues else None
+    return venue, city
+
+
+def _extract_event_price(ev):
+    """Extract and format price from event data."""
     try:
         pr = ev.get("priceRanges")
         if isinstance(pr, list) and pr:
             mn = pr[0].get("min")
             mx = pr[0].get("max")
             if mn is not None and mx is not None:
-                price_text = f"{mn}-{mx}"
+                return f"{mn}-{mx}"
     except (KeyError, IndexError, TypeError, AttributeError):
         pass
+    return None
+
+
+def _parse_event_fields(ev):
+    """Parse and extract event fields from CSV event data."""
+    title = ev.get("name") or ""
+    url = ev.get("url") or None
+    parsed_date, parsed_time = _extract_event_dates(ev)
+    venue, city = _extract_event_location(ev)
+    price_text = _extract_event_price(ev)
     
     return {
         "title": title,
