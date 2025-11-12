@@ -9,6 +9,8 @@ DEFAULT_DATABASE_URI = 'sqlite:///voyagerai.db'
 
 class Config:
     """Base configuration class"""
+    # Security: SECRET_KEY should be set via environment variable in production
+    # The default value is only for development and should never be used in production
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', DEFAULT_DATABASE_URI)

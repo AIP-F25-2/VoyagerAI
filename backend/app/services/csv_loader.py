@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import os
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -83,8 +84,9 @@ class CSVEventLoader:
             # Extract city from venue or description
             city = self._extract_city(venue, description, title)
             
-            # Create unique ID
-            event_id = f"csv_{filename}_{index}_{hash(title)}"
+            # Create unique ID using hashlib for security (avoiding weak hash() function)
+            title_hash = hashlib.sha256(title.encode()).hexdigest()[:8]
+            event_id = f"csv_{filename}_{index}_{title_hash}"
             
             # Format for frontend (matching Ticketmaster format)
             formatted_event = {
