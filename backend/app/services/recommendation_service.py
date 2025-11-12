@@ -132,44 +132,53 @@ class RecommendationService:
             logger.error(f"Error getting recommendations by preferences: {e}")
             return self._get_popular_events(limit)
     
+    def _calculate_city_score(self, event: Event, preferences: Dict[str, Any]) -> float:
+        """Calculate city preference score."""
+        if event.city and event.city in preferences["preferred_cities"]:
+            return preferences["preferred_cities"][event.city] * 2.0
+        return 0.0
+
+    def _calculate_venue_score(self, event: Event, preferences: Dict[str, Any]) -> float:
+        """Calculate venue preference score."""
+        if event.venue and event.venue in preferences["preferred_venues"]:
+            return preferences["preferred_venues"][event.venue] * 1.5
+        return 0.0
+
+    def _calculate_category_score(self, event: Event, preferences: Dict[str, Any]) -> float:
+        """Calculate category preference score."""
+        category = self._infer_category_from_title(event.title)
+        if category and category in preferences["preferred_categories"]:
+            return preferences["preferred_categories"][category] * 3.0
+        return 0.0
+
+    def _calculate_time_score(self, event: Event, preferences: Dict[str, Any]) -> float:
+        """Calculate time preference score."""
+        if not event.time:
+            return 0.0
+        
+        time_slot = self._get_time_slot(event.time.hour)
+        if time_slot in preferences["preferred_times"]:
+            return preferences["preferred_times"][time_slot] * 1.0
+        return 0.0
+
+    def _calculate_day_score(self, event: Event, preferences: Dict[str, Any]) -> float:
+        """Calculate day preference score."""
+        if not event.date:
+            return 0.0
+        
+        day_of_week = event.date.strftime("%A").lower()
+        if day_of_week in preferences["preferred_days"]:
+            return preferences["preferred_days"][day_of_week] * 1.0
+        return 0.0
+
     def _calculate_event_score(self, event: Event, preferences: Dict[str, Any]) -> float:
         """Calculate recommendation score for an event based on user preferences"""
         score = 0.0
-        
-        # City preference score
-        if event.city and event.city in preferences["preferred_cities"]:
-            score += preferences["preferred_cities"][event.city] * 2.0
-        
-        # Venue preference score
-        if event.venue and event.venue in preferences["preferred_venues"]:
-            score += preferences["preferred_venues"][event.venue] * 1.5
-        
-        # Category preference score
-        category = self._infer_category_from_title(event.title)
-        if category and category in preferences["preferred_categories"]:
-            score += preferences["preferred_categories"][category] * 3.0
-        
-        # Time preference score
-        if event.time:
-            hour = event.time.hour
-            if 6 <= hour < 12:
-                time_slot = "morning"
-            elif 12 <= hour < 17:
-                time_slot = "afternoon"
-            elif 17 <= hour < 21:
-                time_slot = "evening"
-            else:
-                time_slot = "night"
-            
-            if time_slot in preferences["preferred_times"]:
-                score += preferences["preferred_times"][time_slot] * 1.0
-        
-        # Day preference score
-        if event.date:
-            day_of_week = event.date.strftime("%A").lower()
-            if day_of_week in preferences["preferred_days"]:
-                score += preferences["preferred_days"][day_of_week] * 1.0
-        
+        score += self._calculate_city_score(event, preferences)
+        score += self._calculate_venue_score(event, preferences)
+        score += self._calculate_category_score(event, preferences)
+        score += self._calculate_time_score(event, preferences)
+        score += self._calculate_day_score(event, preferences)
         return score
     
     def _get_recommendation_reason(self, event: Event, preferences: Dict[str, Any]) -> str:

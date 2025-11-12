@@ -303,6 +303,41 @@ class ElasticsearchService:
             sort_clause.append({"date": {"order": "asc"}})
         return sort_clause
 
+    def _build_search_clauses(
+        self,
+        query: Optional[str],
+        city: Optional[str],
+        category: Optional[str],
+        date_from: Optional[str],
+        date_to: Optional[str],
+        price_min: Optional[float],
+        price_max: Optional[float],
+        source: Optional[str]
+    ) -> tuple:
+        """Build must and filter clauses for search query."""
+        must_clauses = []
+        filter_clauses = []
+        
+        if query:
+            must_clauses.append(self._build_text_search_clause(query))
+        
+        if city:
+            filter_clauses.append(self._build_city_filter(city))
+        
+        if category:
+            filter_clauses.append({"term": {"category": category.lower()}})
+        
+        if date_from or date_to:
+            filter_clauses.append(self._build_date_range_filter(date_from, date_to))
+        
+        if price_min is not None or price_max is not None:
+            filter_clauses.append(self._build_price_range_filter(price_min, price_max))
+        
+        if source:
+            filter_clauses.append({"term": {"source": source.lower()}})
+        
+        return must_clauses, filter_clauses
+
     def search_events(
         self,
         query: Optional[str] = None,
@@ -332,27 +367,9 @@ class ElasticsearchService:
             return {"events": [], "total": 0, "page": page, "page_size": page_size}
         
         try:
-            # Build query clauses
-            must_clauses = []
-            filter_clauses = []
-            
-            if query:
-                must_clauses.append(self._build_text_search_clause(query))
-            
-            if city:
-                filter_clauses.append(self._build_city_filter(city))
-            
-            if category:
-                filter_clauses.append({"term": {"category": category.lower()}})
-            
-            if date_from or date_to:
-                filter_clauses.append(self._build_date_range_filter(date_from, date_to))
-            
-            if price_min is not None or price_max is not None:
-                filter_clauses.append(self._build_price_range_filter(price_min, price_max))
-            
-            if source:
-                filter_clauses.append({"term": {"source": source.lower()}})
+            must_clauses, filter_clauses = self._build_search_clauses(
+                query, city, category, date_from, date_to, price_min, price_max, source
+            )
             
             # Build final query and sort
             es_query = self._build_es_query(must_clauses, filter_clauses)

@@ -114,19 +114,27 @@ def _extract_description(soup):
     return None
 
 
+def _extract_city_from_parent(parent, venue: str) -> Optional[str]:
+    """Extract city from parent element text."""
+    if not parent:
+        return None
+    
+    parent_text = parent.get_text(" |,:\n", strip=True)
+    if not parent_text or venue not in parent_text:
+        return None
+    
+    pieces = [p.strip() for p in parent_text.split(",") if p.strip()]
+    if len(pieces) >= 2 and pieces[0] != venue:
+        return pieces[-1]
+    
+    return None
+
 def _extract_venue_from_anchor(soup):
     """Extract venue and city from venue anchor links."""
     for a in soup.find_all("a", href=True):
         if "/venue/" in a["href"]:
             venue = a.get_text(strip=True)
-            city = None
-            parent = a.find_parent()
-            if parent:
-                parent_text = parent.get_text(" |,:\n", strip=True)
-                if parent_text and venue in parent_text:
-                    pieces = [p.strip() for p in parent_text.split(",") if p.strip()]
-                    if len(pieces) >= 2 and pieces[0] != venue:
-                        city = pieces[-1]
+            city = _extract_city_from_parent(a.find_parent(), venue)
             return venue, city
     return None, None
 
@@ -214,42 +222,55 @@ def parse_event_page(event_url):
     return data
 
 
-def scrape_month(year, month):
-    start_str, end_str = month_date_range(year, month)
-    print(f"[INFO] scraping {year}-{str(month).zfill(2)}: {start_str} -> {end_str}")
-    page = 1
+def _fetch_search_page(url: str):
+    """Fetch and return soup for a search page."""
+    try:
+        return get_soup(url)
+    except Exception as e:
+        print(f"[ERROR] failed to fetch search page {url}: {e}", file=sys.stderr)
+        return None
+
+def _add_new_links(all_event_urls: set, links: list) -> int:
+    """Add new links to set and return count of new links."""
+    new_links = 0
+    for l in links:
+        if l not in all_event_urls:
+            all_event_urls.add(l)
+            new_links += 1
+    return new_links
+
+def _has_next_page(soup) -> bool:
+    """Check if there's a next page button."""
+    next_btn = soup.find("a", string=lambda s: s and ("Next" in s or "next" in s or "›" in s))
+    return next_btn is not None
+
+def _collect_event_urls(start_str: str, end_str: str) -> set:
+    """Collect all event URLs from search pages."""
     all_event_urls = set()
+    page = 1
+    
     while True:
         url = build_search_url(start_str, end_str, page=page)
-        try:
-            soup = get_soup(url)
-        except Exception as e:
-            print(f"[ERROR] failed to fetch search page {url}: {e}", file=sys.stderr)
+        soup = _fetch_search_page(url)
+        if not soup:
             break
 
         links = extract_event_links_from_search_soup(soup)
         if not links:
-            # no events on this page, break
             break
 
-        # Add links
-        new_links = 0
-        for l in links:
-            if l not in all_event_urls:
-                all_event_urls.add(l)
-                new_links += 1
-
+        new_links = _add_new_links(all_event_urls, links)
         print(f"  page {page}: found {len(links)} event links, {new_links} new")
         page += 1
         time.sleep(REQUEST_DELAY)
 
-        # Heuristic stop: if pagination isn't supported, we break after page 1.
-        # If we detect a "next" link on the search results, continue; otherwise stop.
-        next_btn = soup.find("a", string=lambda s: s and ("Next" in s or "next" in s or "›" in s))
-        if not next_btn:
+        if not _has_next_page(soup):
             break
 
-    # Now visit each event page
+    return all_event_urls
+
+def _parse_event_pages(all_event_urls: set) -> list:
+    """Parse all event pages and return results."""
     results = []
     for idx, event_url in enumerate(sorted(all_event_urls)):
         print(f"    [{idx+1}/{len(all_event_urls)}] parsing {event_url}")
@@ -257,7 +278,15 @@ def scrape_month(year, month):
         if data:
             results.append(data)
         time.sleep(REQUEST_DELAY)
+    return results
 
+def scrape_month(year, month):
+    start_str, end_str = month_date_range(year, month)
+    print(f"[INFO] scraping {year}-{str(month).zfill(2)}: {start_str} -> {end_str}")
+    
+    all_event_urls = _collect_event_urls(start_str, end_str)
+    results = _parse_event_pages(all_event_urls)
+    
     return results
 
 

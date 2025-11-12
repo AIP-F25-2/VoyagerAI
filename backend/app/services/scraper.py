@@ -7,6 +7,7 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
+from typing import Optional
 from urllib.parse import urljoin, urlparse
 from playwright.sync_api import sync_playwright
 
@@ -73,34 +74,64 @@ def scroll_until_stable(page, max_loops=18, pause=0.6):
             stable = 0
             last = h
 
+def _normalize_href(href: str) -> str:
+    """Normalize href to full URL if needed."""
+    if href.startswith("/"):
+        return BMS_BASE + href
+    return href
+
+def _is_event_url(href: str) -> bool:
+    """Check if href is an event URL."""
+    return "/events/" in href or "/activities/" in href or "/buytickets/" in href
+
+def _should_skip_url(href: str) -> bool:
+    """Check if URL should be skipped (movies, etc.)."""
+    skip_patterns = ["/movies/", "/cinema/", "/theatre/", "/movie/"]
+    return any(skip in href.lower() for skip in skip_patterns)
+
+def _process_link_element(loc, i: int) -> Optional[str]:
+    """Process a single link element and return clean URL if valid."""
+    try:
+        href = loc.nth(i).get_attribute("href")
+        if not href:
+            return None
+        
+        href = _normalize_href(href)
+        
+        if _should_skip_url(href):
+            return None
+        
+        if _is_event_url(href):
+            return href.split("?")[0]
+        
+        return None
+    except Exception as e:
+        print(f"Error processing link {i}: {e}")
+        return None
+
+def _get_link_count(loc) -> int:
+    """Get count of links for a locator."""
+    try:
+        n = loc.count()
+        print(f"Found {n} elements with selector: {loc}")
+        return n
+    except (TimeoutError, AttributeError, TypeError):
+        return 0
+
 def collect_bms_links(page):
     links = set()
-    # Updated selectors based on current BookMyShow structure
-    for css in ["a[href*='/events/']", "a[href*='/activities/']", "a[href*='/buytickets/']"]:
+    selectors = ["a[href*='/events/']", "a[href*='/activities/']", "a[href*='/buytickets/']"]
+    
+    for css in selectors:
         loc = page.locator(css)
-        try: 
-            n = loc.count()
-            print(f"Found {n} elements with selector: {css}")
-        except: 
-            n = 0
-        for i in range(min(n, 100)):  # Reduced limit for testing
-            try:
-                href = loc.nth(i).get_attribute("href")
-                if not href: 
-                    continue
-                if href.startswith("/"): 
-                    href = BMS_BASE + href
-                # Skip movies and other non-event content
-                if any(skip in href.lower() for skip in ["/movies/", "/cinema/", "/theatre/", "/movie/"]):
-                    continue
-                # Only include actual event URLs
-                if "/events/" in href or "/activities/" in href or "/buytickets/" in href:
-                    clean_url = href.split("?")[0]
-                    links.add(clean_url)
-                    print(f"Added link: {clean_url}")
-            except Exception as e:
-                print(f"Error processing link {i}: {e}")
-                pass
+        n = _get_link_count(loc)
+        
+        for i in range(min(n, 100)):
+            clean_url = _process_link_element(loc, i)
+            if clean_url:
+                links.add(clean_url)
+                print(f"Added link: {clean_url}")
+    
     print(f"Total unique links collected: {len(links)}")
     return sorted(links)
 
