@@ -142,133 +142,185 @@ def first(v):
         return v
     return None
 
+def _parse_start_date(iso_date):
+    """Parse start date from ISO format string."""
+    if not isinstance(iso_date, str):
+        return None, None
+    m = re.match(r"^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})", iso_date)
+    if m:
+        return m.group(1), m.group(2)
+    return None, None
+
+def _parse_location(loc):
+    """Parse location information from dict."""
+    if not isinstance(loc, dict):
+        return None, None
+    venue = first(loc.get("name"))
+    addr = loc.get("address")
+    place = None
+    if isinstance(addr, dict):
+        place = addr.get("addressLocality") or addr.get("addressRegion")
+    return venue, place
+
+def _parse_price_from_dict(offers):
+    """Parse price from offers dict."""
+    cur = offers.get("priceCurrency") or ""
+    low, high, p = offers.get("lowPrice"), offers.get("highPrice"), offers.get("price")
+    if low and high:
+        return f"{cur} {low}-{high}"
+    elif low:
+        return f"{cur} {low}"
+    elif p:
+        return f"{cur} {p}"
+    return None
+
+def _parse_price_from_list(offers):
+    """Parse price from offers list."""
+    if not offers:
+        return None
+    cur = offers[0].get("priceCurrency") or ""
+    p = offers[0].get("price")
+    return f"{cur} {p}" if p else None
+
+def _parse_price(offers):
+    """Parse price from offers (dict or list)."""
+    if isinstance(offers, dict):
+        return _parse_price_from_dict(offers)
+    elif isinstance(offers, list):
+        return _parse_price_from_list(offers)
+    return None
+
 def parse_jsonld_event(obj):
     out = {"title": None, "date": None, "time": None, "venue": None, "place": None, "price": None}
     out["title"] = obj.get("name") or obj.get("headline")
+    
     iso = first(obj.get("startDate"))
-    if isinstance(iso, str):
-        m = re.match(r"^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})", iso)
-        if m: 
-            out["date"], out["time"] = m.group(1), m.group(2)
+    out["date"], out["time"] = _parse_start_date(iso)
+    
     loc = obj.get("location")
-    if isinstance(loc, dict):
-        out["venue"] = first(loc.get("name"))
-        addr = loc.get("address")
-        if isinstance(addr, dict):
-            out["place"] = addr.get("addressLocality") or addr.get("addressRegion")
+    out["venue"], out["place"] = _parse_location(loc)
+    
     offers = obj.get("offers")
-    if isinstance(offers, dict):
-        cur = offers.get("priceCurrency") or ""
-        low, high, p = offers.get("lowPrice"), offers.get("highPrice"), offers.get("price")
-        if low and high: 
-            out["price"] = f"{cur} {low}-{high}"
-        elif low:        
-            out["price"] = f"{cur} {low}"
-        elif p:          
-            out["price"] = f"{cur} {p}"
-    elif isinstance(offers, list) and offers:
-        cur = offers[0].get("priceCurrency") or ""
-        p = offers[0].get("price")
-        out["price"] = f"{cur} {p}" if p else None
+    out["price"] = _parse_price(offers)
+    
     return out
+
+def _try_get_text_from_selectors(page, selectors):
+    """Try to get text from multiple selectors."""
+    for selector in selectors:
+        try:
+            element = page.locator(selector).first
+            if element.is_visible():
+                return element.inner_text().strip()
+        except (TimeoutError, AttributeError, TypeError):
+            continue
+    return None
+
+def _get_title_from_page(page):
+    """Get title from page using multiple selectors."""
+    try:
+        title_selectors = ["h1", ".event-title", "[data-testid='event-title']", ".event-name"]
+        title = _try_get_text_from_selectors(page, title_selectors)
+        if not title:
+            title = (page.title() or "").strip() or None
+        return title
+    except (TimeoutError, AttributeError, TypeError):
+        return None
+
+def _get_venue_from_page(page):
+    """Get venue from page using multiple selectors."""
+    try:
+        venue_selectors = [".venue-name", ".event-venue", "[data-testid='venue']", ".location"]
+        return _try_get_text_from_selectors(page, venue_selectors)
+    except (TimeoutError, AttributeError, TypeError):
+        return None
+
+def _parse_date_time_text(date_text):
+    """Parse date and time from text."""
+    if "at" in date_text.lower():
+        parts = date_text.split("at")
+        return parts[0].strip(), parts[1].strip()
+    return date_text, None
+
+def _get_date_time_from_page(page):
+    """Get date and time from page using multiple selectors."""
+    try:
+        date_selectors = [".event-date", ".date-time", "[data-testid='date']", ".event-time"]
+        date_text = _try_get_text_from_selectors(page, date_selectors)
+        if date_text:
+            return _parse_date_time_text(date_text)
+        return None, None
+    except (TimeoutError, AttributeError, TypeError):
+        return None, None
+
+def _get_price_from_page(page):
+    """Get price from page using multiple selectors."""
+    try:
+        price_selectors = [".price", ".ticket-price", "[data-testid='price']", ".event-price"]
+        return _try_get_text_from_selectors(page, price_selectors)
+    except (TimeoutError, AttributeError, TypeError):
+        return None
+
+def _get_jsonld_scripts_count(page):
+    """Get count of JSON-LD scripts."""
+    scripts = page.locator("script[type='application/ld+json']")
+    try:
+        return scripts.count()
+    except (TimeoutError, AttributeError, TypeError):
+        return 0
+
+def _parse_jsonld_script(scripts, i):
+    """Parse a single JSON-LD script."""
+    try:
+        data = scripts.nth(i).inner_text()
+        if not data:
+            return None
+        return json.loads(data)
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        return None
+
+def _extract_event_from_jsonld(data):
+    """Extract event data from JSON-LD structure."""
+    items = data if isinstance(data, list) else [data]
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        t = it.get("@type")
+        if t == "Event" or (isinstance(t, list) and "Event" in t):
+            return parse_jsonld_event(it)
+    return None
+
+def _get_data_from_jsonld(page):
+    """Get event data from JSON-LD structured data."""
+    scripts = page.locator("script[type='application/ld+json']")
+    n = _get_jsonld_scripts_count(page)
+    
+    for i in range(n):
+        data = _parse_jsonld_script(scripts, i)
+        if not data:
+            continue
+        
+        event_data = _extract_event_from_jsonld(data)
+        if event_data:
+            return event_data
+    
+    return None
 
 def parse_bms_event(page):
     row = {"title": None, "date": None, "time": None, "venue": None, "place": None, "price": None}
     
-    # Try to get title from page
-    try:
-        # Try multiple selectors for title
-        title_selectors = ["h1", ".event-title", "[data-testid='event-title']", ".event-name"]
-        for selector in title_selectors:
-            try:
-                title_element = page.locator(selector).first
-                if title_element.is_visible():
-                    row["title"] = title_element.inner_text().strip()
-                    break
-            except:
-                continue
-        
-        # Fallback to page title
-        if not row["title"]:
-            row["title"] = (page.title() or "").strip() or None
-    except:
-        pass
-    
-    # Try to get venue information
-    try:
-        venue_selectors = [".venue-name", ".event-venue", "[data-testid='venue']", ".location"]
-        for selector in venue_selectors:
-            try:
-                venue_element = page.locator(selector).first
-                if venue_element.is_visible():
-                    row["venue"] = venue_element.inner_text().strip()
-                    break
-            except:
-                continue
-    except:
-        pass
-    
-    # Try to get date/time information
-    try:
-        date_selectors = [".event-date", ".date-time", "[data-testid='date']", ".event-time"]
-        for selector in date_selectors:
-            try:
-                date_element = page.locator(selector).first
-                if date_element.is_visible():
-                    date_text = date_element.inner_text().strip()
-                    # Try to parse date and time
-                    if "at" in date_text.lower():
-                        parts = date_text.split("at")
-                        row["date"] = parts[0].strip()
-                        row["time"] = parts[1].strip()
-                    else:
-                        row["date"] = date_text
-                    break
-            except:
-                continue
-    except:
-        pass
-    
-    # Try to get price information
-    try:
-        price_selectors = [".price", ".ticket-price", "[data-testid='price']", ".event-price"]
-        for selector in price_selectors:
-            try:
-                price_element = page.locator(selector).first
-                if price_element.is_visible():
-                    row["price"] = price_element.inner_text().strip()
-                    break
-            except:
-                continue
-    except:
-        pass
+    row["title"] = _get_title_from_page(page)
+    row["venue"] = _get_venue_from_page(page)
+    row["date"], row["time"] = _get_date_time_from_page(page)
+    row["price"] = _get_price_from_page(page)
     
     # Fallback: Try JSON-LD structured data
     if not row["title"]:
-        scripts = page.locator("script[type='application/ld+json']")
-        try: 
-            n = scripts.count()
-        except: 
-            n = 0
-        for i in range(n):
-            try:
-                data = scripts.nth(i).inner_text()
-                if not data: 
-                    continue
-                data = json.loads(data)
-            except:
-                continue
-            items = data if isinstance(data, list) else [data]
-            for it in items:
-                if isinstance(it, dict):
-                    t = it.get("@type")
-                    if t == "Event" or (isinstance(t, list) and "Event" in t):
-                        got = parse_jsonld_event(it)
-                        for k,v in got.items():
-                            if v and not row[k]: 
-                                row[k] = v
-            if row["title"]: 
-                break
+        jsonld_data = _get_data_from_jsonld(page)
+        if jsonld_data:
+            for k, v in jsonld_data.items():
+                if v and not row[k]:
+                    row[k] = v
     
     print(f"Parsed event: {row}")
     return row
