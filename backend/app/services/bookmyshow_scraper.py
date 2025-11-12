@@ -32,6 +32,7 @@ def consent(page):
 def scroll_until_stable(page, max_loops=18, pause=0.6):
     last = 0; stable = 0
     for _ in range(max_loops):
+        # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
         page.mouse.wheel(0, 2400); time.sleep(pause + random.uniform(0.05, 0.25))
         try:
             h = page.evaluate("document.body.scrollHeight")
@@ -247,6 +248,7 @@ def retry_goto(page, url, attempts=3, wait="domcontentloaded", timeout=60000):
             return True, None
         except Exception as e:
             last = e
+            # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
             time.sleep(1.2 + i*0.8 + random.uniform(0.2, 0.6))
     return False, last
 
@@ -320,6 +322,7 @@ def scrape_bookmyshow_events(city="Mumbai", limit=100, headless=True):
                 continue
             data = parse_event(page); data["url"] = url
             rows.append(data)
+            # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
             time.sleep(0.25 + random.uniform(0.05, 0.25))
 
         ctx.close(); browser.close()

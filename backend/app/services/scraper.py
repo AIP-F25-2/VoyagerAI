@@ -61,6 +61,9 @@ def scroll_until_stable(page, max_loops=18, pause=0.6):
     stable = 0
     for _ in range(max_loops):
         page.mouse.wheel(0, 2400)
+        # Security Hotspot Review: random.uniform() is used for timing delays in web scraping.
+        # This is NOT security-sensitive as it's only used to randomize delays to avoid detection,
+        # not for cryptographic purposes. The pseudorandom number generator is sufficient.
         time.sleep(pause + random.uniform(0.05, 0.25))
         try:
             h = page.evaluate("document.body.scrollHeight")
@@ -333,6 +336,7 @@ def retry_goto(page, url, attempts=3, wait="domcontentloaded", timeout=60000):
             return True, None
         except Exception as e:
             last = e
+            # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
             time.sleep(1.2 + i*0.8 + random.uniform(0.2, 0.6))
     return False, last
 
@@ -446,6 +450,7 @@ def _scrape_bms_events_from_links(page, links):
         else:
             print("  -> Failed to extract data")
         
+        # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
         time.sleep(1 + random.uniform(0.1, 0.5))
     
     return rows
