@@ -553,17 +553,17 @@ def get_eventbrite_event_details(page, url):
 
         try:
             date_time = page.locator("div[data-testid='event-date-and-time']").inner_text().strip()
-        except:
+        except (TimeoutError, AttributeError, TypeError):
             date_time = ""
 
         try:
             location = page.locator("div[data-testid='event-detail-location']").inner_text().strip()
-        except:
+        except (TimeoutError, AttributeError, TypeError):
             location = ""
 
         try:
             price = page.locator("div[data-testid='event-details__data']").inner_text().strip()
-        except:
+        except (TimeoutError, AttributeError, TypeError):
             price = ""
 
         return {
