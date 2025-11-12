@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import { API_BASE_URL } from "@/lib/apiConfig";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
-    const res = await fetch(`http://127.0.0.1:5001/api/itineraries/${params.id}`);
+    const res = await fetch(`${API_BASE_URL}/api/itineraries/${params.id}`);
     const data = await res.json();
     return NextResponse.json(data);
   } catch (error) {
@@ -13,7 +14,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
     const body = await req.json();
-    const res = await fetch(`http://127.0.0.1:5001/api/itineraries/${params.id}`, {
+    const res = await fetch(`${API_BASE_URL}/api/itineraries/${params.id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -29,7 +30,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   try {
-    const res = await fetch(`http://127.0.0.1:5001/api/itineraries/${params.id}`, {
+    const res = await fetch(`${API_BASE_URL}/api/itineraries/${params.id}`, {
       method: 'DELETE',
     });
     const data = await res.json();

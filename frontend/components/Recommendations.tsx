@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { getFavorites } from "@/lib/api";
+import { apiClient } from "@/lib/apiClient";
 
 interface RecommendedEvent {
   id: number;
@@ -36,12 +37,7 @@ function RecommendationsContent({ onEventClick }: RecommendationsProps) {
       try {
         const token = localStorage.getItem('voyagerai_token');
         if (token) {
-          const response = await fetch('http://127.0.0.1:5001/api/auth/verify-token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token })
-          });
-          const data = await response.json();
+          const data = await apiClient.post('/api/auth/verify-token', { token });
           
           if (data.success && data.user) {
             setIsAuthenticated(true);
@@ -107,13 +103,7 @@ function RecommendationsContent({ onEventClick }: RecommendationsProps) {
           console.log('Recommendations: Token found:', token ? 'Yes' : 'No');
           
           if (token) {
-            const response = await fetch('http://127.0.0.1:5001/api/auth/profile', {
-              headers: { 'Authorization': `Bearer ${token}` }
-            });
-            console.log('Recommendations: Profile response status:', response.status);
-            
-            if (response.ok) {
-              const userData = await response.json();
+            const userData = await apiClient.get('/api/auth/profile');
               console.log('Recommendations: Profile data:', userData);
               if (userData.user?.email) {
                 console.log('Recommendations: Using profile email:', userData.user.email);
@@ -169,8 +159,7 @@ function RecommendationsContent({ onEventClick }: RecommendationsProps) {
   const loadTrending = async () => {
     try {
       console.log('Recommendations: Loading trending events...');
-      const response = await fetch('http://127.0.0.1:5001/api/events/trending');
-      const data = await response.json();
+      const data = await apiClient.get('/api/events/trending');
       
       if (data.success && data.trending) {
         const trendingEvents = data.trending.map((event: any) => ({

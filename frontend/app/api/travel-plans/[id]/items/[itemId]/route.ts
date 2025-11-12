@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
+import { API_BASE_URL } from "@/lib/apiConfig";
 
 export async function PUT(req: Request, { params }: { params: { id: string; itemId: string } }) {
   try {
     const body = await req.json();
-    const res = await fetch(`http://127.0.0.1:5001/api/itineraries/${params.id}/items/${params.itemId}`, {
+    const res = await fetch(`${API_BASE_URL}/api/itineraries/${params.id}/items/${params.itemId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -19,7 +20,7 @@ export async function PUT(req: Request, { params }: { params: { id: string; item
 
 export async function DELETE(req: Request, { params }: { params: { id: string; itemId: string } }) {
   try {
-    const res = await fetch(`http://127.0.0.1:5001/api/itineraries/${params.id}/items/${params.itemId}`, {
+    const res = await fetch(`${API_BASE_URL}/api/itineraries/${params.id}/items/${params.itemId}`, {
       method: 'DELETE',
     });
     const data = await res.json();

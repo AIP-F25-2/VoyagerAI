@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import { API_BASE_URL } from "@/lib/apiConfig";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
-    const res = await fetch(`http://127.0.0.1:5001/api/itineraries/${params.id}/items`);
+    const res = await fetch(`${API_BASE_URL}/api/itineraries/${params.id}/items`);
     const data = await res.json();
     return NextResponse.json(data);
   } catch (error) {
@@ -13,7 +14,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const body = await req.json();
-    const res = await fetch(`http://127.0.0.1:5001/api/itineraries/${params.id}/items`, {
+    const res = await fetch(`${API_BASE_URL}/api/itineraries/${params.id}/items`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

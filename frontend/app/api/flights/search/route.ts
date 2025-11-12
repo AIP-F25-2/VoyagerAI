@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { API_BASE_URL } from "@/lib/apiConfig";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -17,7 +18,7 @@ export async function GET(req: Request) {
   if (adults) params.set("adults", adults);
   if (limit) params.set("limit", limit);
 
-  const res = await fetch(`http://127.0.0.1:5001/api/flights/search?${params.toString()}`);
+  const res = await fetch(`${API_BASE_URL}/api/flights/search?${params.toString()}`);
   const data = await res.json();
   return NextResponse.json(data);
 }

@@ -111,8 +111,6 @@ import SearchBar from "@/components/ui/SearchBar";
 import EventsSection from "@/components/ui/EventsSection";
 import AdvancedFilters from "@/components/AdvancedFilters";
 // Removed Recommendations component
-import FlightsPlanner from "@/components/FlightsPlanner";
-import HotelsPlanner from "@/components/HotelsPlanner";
 import AddToItinerary from "@/components/AddToItinerary";
 import AIChat from "@/components/AIChat";
 import Link from "next/link";
@@ -157,6 +155,7 @@ export default function HomePage() {
   const loadEvents = async (search: string, detectedCity = "", appliedFilters = {}, searchMode: "events" | "hotels" = "events") => {
     setLoading(true);
     setError(null);
+    console.log('🔄 Loading events with:', { search, detectedCity, appliedFilters, searchMode });
     try {
       if (searchMode === "hotels") {
         // Search hotels
@@ -179,19 +178,74 @@ export default function HomePage() {
         if (search) params.append("q", search);
         if (detectedCity) params.append("city", detectedCity);
         
-        // Add filter parameters
+        // Add filter parameters (only non-empty values)
         Object.entries(appliedFilters).forEach(([key, value]) => {
-          if (value && value !== "") {
+          if (value && value !== "" && value !== "all") {
             params.append(key, value as string);
           }
         });
+        
+        // Always add limit to ensure we get results
+        if (!params.has("limit")) {
+          params.append("limit", "50");
+        }
 
         const res = await fetch(`/api/events?${params.toString()}`);
         if (!res.ok) throw new Error("Backend unavailable or API error");
         const data = await res.json();
-        setTicketmasterEvents(data.ticketmaster || []);
-        setEventbriteEvents(data.eventbrite || []);
-        setCsvEvents(data.csv_events || []);
+        
+        // Handle both Elasticsearch (merged) and fallback responses
+        // Always use individual arrays if they exist (even if empty), otherwise use merged array
+        const hasIndividualArrays = data.ticketmaster !== undefined || 
+                                     data.eventbrite !== undefined || 
+                                     data.csv_events !== undefined;
+        
+        if (hasIndividualArrays) {
+          // Use individual arrays (preferred - most reliable)
+          // Always set these, even if empty arrays, to show proper "no events" messages
+          const tmEvents = Array.isArray(data.ticketmaster) ? data.ticketmaster : [];
+          const ebEvents = Array.isArray(data.eventbrite) ? data.eventbrite : [];
+          const csvEvts = Array.isArray(data.csv_events) ? data.csv_events : [];
+          
+          // Set all states together to ensure proper updates
+          setTicketmasterEvents(tmEvents);
+          setEventbriteEvents(ebEvents);
+          setCsvEvents(csvEvts);
+          
+          // Debug: Log what we're setting
+          console.log('✅ Setting events state:', {
+            ticketmaster: tmEvents.length,
+            eventbrite: ebEvents.length,
+            csv: csvEvts.length,
+            firstTMName: tmEvents.length > 0 ? tmEvents[0]?.name : 'none'
+          });
+        } else if (data.merged && Array.isArray(data.merged) && data.merged.length > 0) {
+          // Fallback: Split merged array by source (for Elasticsearch responses)
+          // Note: "unknown" source events are treated as Ticketmaster (legacy indexed events)
+          const merged = data.merged || [];
+          setTicketmasterEvents(merged.filter((e: any) => 
+            !e.source || e.source === "ticketmaster" || e.source === "unknown"
+          ));
+          setEventbriteEvents(merged.filter((e: any) => e.source === "eventbrite"));
+          setCsvEvents(merged.filter((e: any) => e.source === "csv"));
+        } else {
+          // No events found
+          setTicketmasterEvents([]);
+          setEventbriteEvents([]);
+          setCsvEvents([]);
+        }
+        
+        // Debug logging (remove in production)
+        console.log('📊 Events loaded from API:', {
+          ticketmaster: Array.isArray(data.ticketmaster) ? data.ticketmaster.length : 0,
+          eventbrite: Array.isArray(data.eventbrite) ? data.eventbrite.length : 0,
+          csv: Array.isArray(data.csv_events) ? data.csv_events.length : 0,
+          merged: Array.isArray(data.merged) ? data.merged.length : 0,
+          source: data.source,
+          hasTicketmasterKey: 'ticketmaster' in data,
+          ticketmasterType: typeof data.ticketmaster,
+          firstTMName: Array.isArray(data.ticketmaster) && data.ticketmaster.length > 0 ? data.ticketmaster[0]?.name : 'none'
+        });
         // Clear hotels when searching events
         setHotels([]);
       }
@@ -211,12 +265,11 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (city) {
-      loadEvents(query, city, filters, searchType);
-    } else {
-      loadEvents(query, "", filters, searchType); // fallback without location
-    }
-  }, [city, filters, searchType]);
+    // Always load events on mount or when dependencies change
+    // Use city from filters if available, otherwise use detected city, otherwise empty (backend will default)
+    const cityToUse = filters.city || city || "";
+    loadEvents(query, cityToUse, filters, searchType);
+  }, [city, filters, searchType, query]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,8 +277,11 @@ export default function HomePage() {
   };
 
   const handleFiltersChange = (newFilters: any) => {
+    console.log('🔧 Filters changed:', newFilters);
     setFilters(newFilters);
-    loadEvents(query, city, newFilters, searchType);
+    // Use city from filters if available, otherwise use detected city
+    const cityToUse = newFilters.city || city || "";
+    loadEvents(query, cityToUse, newFilters, searchType);
   };
 
   const handleSearchTypeChange = (type: "events" | "hotels") => {
@@ -326,20 +382,6 @@ export default function HomePage() {
         />
       </div>
 
-      {/* Travel Planning Section */}
-      <div className="mx-auto max-w-6xl px-4 py-10">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-gray-800/30 rounded-2xl p-6">
-            <h2 className="text-2xl font-bold mb-4 text-center">✈️ Find Flights</h2>
-            <FlightsPlanner />
-          </div>
-          <div className="bg-gray-800/30 rounded-2xl p-6">
-            <h2 className="text-2xl font-bold mb-4 text-center">🏨 Book Hotels</h2>
-            <HotelsPlanner />
-          </div>
-        </div>
-      </div>
-
       {/* Recommendations section removed */}
 
       {/* Results */}
@@ -409,6 +451,40 @@ export default function HomePage() {
                     <a href="/hotels" className="inline-block mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">
                       🌐 Browse All Hotels
                     </a>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Filter Summary */}
+            {searchType === "events" && Object.keys(filters).some(key => {
+              const value = filters[key];
+              return value && value !== "" && value !== "all" && value !== "date_asc";
+            }) && (
+              <div className="mb-6 p-4 bg-blue-600/20 border border-blue-500/30 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">🔍</span>
+                  <span className="font-semibold text-blue-200">Filters Applied</span>
+                </div>
+                <p className="text-sm text-gray-300">
+                  Showing {ticketmasterEvents.length + eventbriteEvents.length + csvEvents.length} total events
+                  {filters.city && ` in ${filters.city}`}
+                  {filters.category && ` • Category: ${filters.category}`}
+                  {filters.date_from && ` • From: ${filters.date_from}`}
+                  {filters.date_to && ` to ${filters.date_to}`}
+                  {filters.price_min && ` • Price: $${filters.price_min}`}
+                  {filters.price_max && ` - $${filters.price_max}`}
+                </p>
+                {filters.city && ticketmasterEvents.length === 0 && eventbriteEvents.length === 0 && csvEvents.length === 0 && (
+                  <div className="mt-3 p-3 bg-yellow-600/20 border border-yellow-500/30 rounded">
+                    <p className="text-sm text-yellow-200">
+                      ⚠️ No events found for <strong>{filters.city}</strong>. Try:
+                    </p>
+                    <ul className="mt-2 ml-4 text-xs text-yellow-300 list-disc">
+                      <li>Check if the city name is spelled correctly</li>
+                      <li>Try a different city or remove the city filter</li>
+                      <li>Check the backend console logs for filtering details</li>
+                    </ul>
                   </div>
                 )}
               </div>

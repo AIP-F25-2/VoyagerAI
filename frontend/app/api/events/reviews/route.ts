@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { API_BASE_URL } from "@/lib/apiConfig";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -13,7 +14,7 @@ export async function GET(req: Request) {
   if (limit) params.set("limit", limit);
 
   try {
-    const res = await fetch(`http://127.0.0.1:5001/api/events/reviews?${params.toString()}`);
+    const res = await fetch(`${API_BASE_URL}/api/events/reviews?${params.toString()}`);
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
   } catch (error) {
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     
-    const res = await fetch("http://127.0.0.1:5001/api/events/reviews", {
+    const res = await fetch(`${API_BASE_URL}/api/events/reviews`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiClient } from "@/lib/apiClient";
 import styles from "./AIChat.module.css";
 
 interface Message {
@@ -60,19 +61,11 @@ export default function AIChat({ onClose, initialMessage }: AIChatProps) {
         content: msg.content,
       }));
 
-      const response = await fetch("http://127.0.0.1:5001/api/llm/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: text,
-          email: user?.email || null,
-          history: history,
-        }),
+      const data = await apiClient.post('/api/llm/chat', {
+        message: text,
+        email: user?.email || null,
+        history: history,
       });
-
-      const data = await response.json();
 
       if (data.success) {
         const assistantMessage: Message = {

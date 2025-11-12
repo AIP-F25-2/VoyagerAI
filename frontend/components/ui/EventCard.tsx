@@ -2,6 +2,7 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiClient } from "@/lib/apiClient";
 import EventSharing from "../EventSharing";
 
 type EventCardProps = {
@@ -92,7 +93,12 @@ export default function EventCard({ event, provider }: EventCardProps) {
       </p>
       {venue && (
         <p className="text-gray-400 text-sm mb-3">
-          📍 {venue.name}, {venue.city?.name}
+          📍 {venue.name}, {venue.city?.name || "Unknown"}
+          {venue.city?.name && (
+            <span className="ml-2 px-2 py-0.5 bg-blue-600/20 border border-blue-500/30 rounded text-xs text-blue-300">
+              {venue.city.name}
+            </span>
+          )}
         </p>
       )}
 
@@ -162,19 +168,16 @@ export default function EventCard({ event, provider }: EventCardProps) {
                 image_url: imageUrlForSave || null,
                 provider: providerLabel,
               };
-              const resp = await fetch("http://127.0.0.1:5001/api/favorites", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body),
-              });
-              if (resp.status === 409) {
-                alert("Already saved to Favorites");
-                return;
-              }
-              if (!resp.ok) {
+              try {
+                await apiClient.post("/api/favorites", body);
+                alert("Saved to Favorites");
+              } catch (error: any) {
+                if (error.message?.includes("409") || error.message?.includes("already")) {
+                  alert("Already saved to Favorites");
+                  return;
+                }
                 throw new Error("Failed to save");
               }
-              alert("Saved to Favorites");
             } catch (e) {
               alert("Failed to save");
             }

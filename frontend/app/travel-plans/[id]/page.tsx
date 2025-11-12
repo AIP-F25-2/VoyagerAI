@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter, useParams } from 'next/navigation'
+import { apiClient } from '@/lib/apiClient'
 import Link from 'next/link'
 
 interface Itinerary {
@@ -88,9 +89,7 @@ export default function ItineraryDetailPage() {
   const fetchItinerary = async () => {
     try {
       console.log('Fetching itinerary with ID:', itineraryId)
-      const response = await fetch(`http://127.0.0.1:5001/api/itineraries/${itineraryId}`)
-      console.log('Response status:', response.status)
-      const data = await response.json()
+      const data = await apiClient.get(`/api/itineraries/${itineraryId}`)
       console.log('Response data:', data)
       
       if (data.success) {
@@ -110,8 +109,7 @@ export default function ItineraryDetailPage() {
 
   const fetchSavedEvents = async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:5001/api/favorites?user_email=${user?.email}`)
-      const data = await response.json()
+      const data = await apiClient.get(`/api/favorites?user_email=${user?.email}`)
       if (data.success) {
         setSavedEvents(data.favorites)
       }
@@ -142,27 +140,19 @@ export default function ItineraryDetailPage() {
 
   const addHotelToItinerary = async (hotel: any) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5001/api/itineraries/${itineraryId}/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          item_type: 'hotel',
-          title: hotel.name,
-          description: hotel.address || hotel.location || '',
-          date: itinerary?.start_date || '',
-          time: '15:00', // Default check-in time
-          location: hotel.address || hotel.location || '',
-          price: hotel.price_per_night ? parseFloat(hotel.price_per_night.replace(/[^0-9.]/g, '')) : null,
-          url: hotel.url || '',
-          image_url: '',
-          status: 'planned',
-          order_index: itinerary?.items?.length || 0
-        }),
+      const data = await apiClient.post(`/api/itineraries/${itineraryId}/items`, {
+        item_type: 'hotel',
+        title: hotel.name,
+        description: hotel.address || hotel.location || '',
+        date: itinerary?.start_date || '',
+        time: '15:00', // Default check-in time
+        location: hotel.address || hotel.location || '',
+        price: hotel.price_per_night ? parseFloat(hotel.price_per_night.replace(/[^0-9.]/g, '')) : null,
+        url: hotel.url || '',
+        image_url: '',
+        status: 'planned',
+        order_index: itinerary?.items?.length || 0
       })
-
-      const data = await response.json()
       if (data.success) {
         setItinerary(prev => prev ? {
           ...prev,
@@ -181,27 +171,19 @@ export default function ItineraryDetailPage() {
 
   const addSavedEventToItinerary = async (event: any) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5001/api/itineraries/${itineraryId}/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          item_type: 'event',
-          title: event.title,
-          description: event.venue || '',
-          date: event.date || '',
-          time: '',
-          location: event.venue || '',
-          price: event.price ? parseFloat(event.price.replace(/[^0-9.]/g, '')) : 0,
-          url: event.url || '',
-          image_url: '',
-          status: 'planned',
-          order_index: itinerary?.items?.length || 0
-        }),
+      const data = await apiClient.post(`/api/itineraries/${itineraryId}/items`, {
+        item_type: 'event',
+        title: event.title,
+        description: event.venue || '',
+        date: event.date || '',
+        time: '',
+        location: event.venue || '',
+        price: event.price ? parseFloat(event.price.replace(/[^0-9.]/g, '')) : 0,
+        url: event.url || '',
+        image_url: '',
+        status: 'planned',
+        order_index: itinerary?.items?.length || 0
       })
-
-      const data = await response.json()
       if (data.success) {
         setItinerary(prev => prev ? {
           ...prev,
@@ -221,19 +203,11 @@ export default function ItineraryDetailPage() {
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const response = await fetch(`http://127.0.0.1:5001/api/itineraries/${itineraryId}/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...newItem,
-          price: newItem.price ? parseFloat(newItem.price) : null,
-          order_index: itinerary?.items?.length || 0
-        }),
+      const data = await apiClient.post(`/api/itineraries/${itineraryId}/items`, {
+        ...newItem,
+        price: newItem.price ? parseFloat(newItem.price) : null,
+        order_index: itinerary?.items?.length || 0
       })
-
-      const data = await response.json()
       if (data.success) {
         setItinerary(prev => prev ? {
           ...prev,
@@ -264,11 +238,9 @@ export default function ItineraryDetailPage() {
     if (!confirm('Are you sure you want to delete this item?')) return
 
     try {
-      const response = await fetch(`http://127.0.0.1:5001/api/itineraries/${itineraryId}/items/${itemId}`, {
-        method: 'DELETE',
-      })
-
-      if (response.ok) {
+      const data = await apiClient.delete(`/api/itineraries/${itineraryId}/items/${itemId}`)
+      
+      if (data.success) {
         setItinerary(prev => prev ? {
           ...prev,
           items: prev.items?.filter(item => item.id !== itemId) || []
@@ -296,17 +268,9 @@ export default function ItineraryDetailPage() {
     }
 
     try {
-      const response = await fetch(`http://127.0.0.1:5001/api/itineraries/${itineraryId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          budget: parseFloat(parseFloat(sanitized).toFixed(2))
-        }),
+      const data = await apiClient.put(`/api/itineraries/${itineraryId}`, {
+        budget: parseFloat(parseFloat(sanitized).toFixed(2))
       })
-
-      const data = await response.json()
       if (data.success) {
         // After updating, refetch the itinerary to avoid any stale merges
         await fetchItinerary()
@@ -334,10 +298,9 @@ export default function ItineraryDetailPage() {
       // 1) Fetch events for destination - filter by date range
       const startDate = itinerary.start_date
       const endDate = itinerary.end_date
-      const eventsResp = await fetch(
-        `http://127.0.0.1:5001/api/events?city=${encodeURIComponent(itinerary.destination)}&date_from=${startDate}&date_to=${endDate}&limit=50`
+      const eventsData = await apiClient.get(
+        `/api/events?city=${encodeURIComponent(itinerary.destination)}&date_from=${startDate}&date_to=${endDate}&limit=50`
       )
-      const eventsData = await eventsResp.json()
       
       // Combine all event sources
       const allEvents = [
@@ -369,23 +332,18 @@ export default function ItineraryDetailPage() {
       const hotels = Array.isArray(hotelsData?.hotels) ? hotelsData.hotels : []
 
       // 3) Call LLM itinerary generation
-      const llmResp = await fetch('http://127.0.0.1:5001/api/llm/itinerary/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          destination: itinerary.destination,
-          start_date: itinerary.start_date,
-          end_date: itinerary.end_date,
-          events,
-          hotels,
-          preferences: {
-            budget: itinerary.budget,
-            hints: customHints || aiHints || undefined,
-            description: itinerary.description || undefined
-          }
-        })
+      const llmData = await apiClient.post('/api/llm/itinerary/generate', {
+        destination: itinerary.destination,
+        start_date: itinerary.start_date,
+        end_date: itinerary.end_date,
+        events,
+        hotels,
+        preferences: {
+          budget: itinerary.budget,
+          hints: customHints || aiHints || undefined,
+          description: itinerary.description || undefined
+        }
       })
-      const llmData = await llmResp.json()
       if (!llmData.success) {
         throw new Error(llmData.error || 'Failed to generate itinerary')
       }
@@ -427,22 +385,18 @@ export default function ItineraryDetailPage() {
             parseFloat(String(hotelData.price_per_night).replace(/[^0-9.-]/g, '')) : null
 
           try {
-            await fetch(`http://127.0.0.1:5001/api/itineraries/${itineraryId}/items`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                item_type: 'hotel',
-                title: hotelTitle,
-                description: hotelAddress,
-                date: dayDate,
-                time: '15:00',
-                location: hotelAddress,
-                price: hotelPrice,
-                url: hotelUrl,
-                image_url: '',
-                status: 'planned',
-                order_index: addedCount++
-              })
+            await apiClient.post(`/api/itineraries/${itineraryId}/items`, {
+              item_type: 'hotel',
+              title: hotelTitle,
+              description: hotelAddress,
+              date: dayDate,
+              time: '15:00',
+              location: hotelAddress,
+              price: hotelPrice,
+              url: hotelUrl,
+              image_url: '',
+              status: 'planned',
+              order_index: addedCount++
             })
             addedHotels.add(hotelTitle.toLowerCase())
           } catch (e) {
@@ -463,22 +417,18 @@ export default function ItineraryDetailPage() {
             const eventPrice = eventData.priceRanges?.[0]?.min || eventData.price || null
 
             try {
-              await fetch(`http://127.0.0.1:5001/api/itineraries/${itineraryId}/items`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  item_type: 'event',
-                  title,
-                  description: eventVenue,
-                  date: eventDate,
-                  time: eventTime,
-                  location: eventVenue,
-                  price: eventPrice,
-                  url: eventUrl,
-                  image_url: '',
-                  status: 'planned',
-                  order_index: addedCount++
-                })
+              await apiClient.post(`/api/itineraries/${itineraryId}/items`, {
+                item_type: 'event',
+                title,
+                description: eventVenue,
+                date: eventDate,
+                time: eventTime,
+                location: eventVenue,
+                price: eventPrice,
+                url: eventUrl,
+                image_url: '',
+                status: 'planned',
+                order_index: addedCount++
               })
             } catch (e) {
               console.error('Failed to add event:', e)
@@ -489,14 +439,11 @@ export default function ItineraryDetailPage() {
         // Add tips as notes
         if (day.tips) {
           try {
-            await fetch(`http://127.0.0.1:5001/api/itineraries/${itineraryId}/items`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                item_type: 'note',
-                title: `Tips for Day ${day.day || ''}`.trim(),
-                description: Array.isArray(day.tips) ? day.tips.join('\n') : String(day.tips),
-                date: dayDate,
+            await apiClient.post(`/api/itineraries/${itineraryId}/items`, {
+              item_type: 'note',
+              title: `Tips for Day ${day.day || ''}`.trim(),
+              description: Array.isArray(day.tips) ? day.tips.join('\n') : String(day.tips),
+              date: dayDate,
                 time: '',
                 location: '',
                 price: null,
@@ -505,7 +452,6 @@ export default function ItineraryDetailPage() {
                 status: 'planned',
                 order_index: addedCount++
               })
-            })
           } catch (e) {
             console.error('Failed to add tips:', e)
           }

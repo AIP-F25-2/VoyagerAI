@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { API_BASE_URL } from "@/lib/apiConfig";
 
 export async function DELETE(
   req: Request,
   { params }: { params: { id: string } }
 ) {
   const { id } = params;
-  const res = await fetch(`http://127.0.0.1:5001/api/favorites/${id}`, {
+  const res = await fetch(`${API_BASE_URL}/api/favorites/${id}`, {
     method: "DELETE",
   });
   const data = await res.json();

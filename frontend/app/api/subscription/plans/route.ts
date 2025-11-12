@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import { API_BASE_URL } from "@/lib/apiConfig";
 
 export async function GET() {
   try {
-    const res = await fetch("http://127.0.0.1:5001/api/subscription/plans");
+    const res = await fetch(`${API_BASE_URL}/api/subscription/plans`);
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
   } catch (error) {

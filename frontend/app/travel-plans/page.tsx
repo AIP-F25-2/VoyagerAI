@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '@/lib/apiClient'
 import Link from 'next/link'
 
 interface Itinerary {
@@ -74,9 +75,7 @@ export default function ItinerariesPage() {
   const fetchItineraries = async () => {
     try {
       console.log('Fetching itineraries for user ID:', user?.id)
-      const response = await fetch(`http://127.0.0.1:5001/api/itineraries?user_id=${user?.id}`)
-      console.log('Fetch response status:', response.status)
-      const data = await response.json()
+      const data = await apiClient.get(`/api/itineraries?user_id=${user?.id}`)
       console.log('Fetch response data:', data)
       
       if (data.success) {
@@ -93,8 +92,7 @@ export default function ItinerariesPage() {
 
   const fetchSavedEvents = async () => {
     try {
-      const response = await fetch(`http://127.0.0.1:5001/api/favorites?user_email=${user?.email}`)
-      const data = await response.json()
+      const data = await apiClient.get(`/api/favorites?user_email=${user?.email}`)
       if (data.success) {
         setSavedEvents(data.favorites)
       }
@@ -105,27 +103,19 @@ export default function ItinerariesPage() {
 
   const addEventToTravelPlan = async (travelPlanId: number, event: any) => {
     try {
-      const response = await fetch(`http://127.0.0.1:5001/api/itineraries/${travelPlanId}/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          item_type: 'event',
-          title: event.title,
-          description: event.venue || '',
-          date: event.date || '',
-          time: '',
-          location: event.venue || '',
-          price: event.price ? parseFloat(event.price.replace(/[^0-9.]/g, '')) : 0,
-          url: event.url || '',
-          image_url: '',
-          status: 'planned',
-          order_index: 0
-        }),
+      const data = await apiClient.post(`/api/itineraries/${travelPlanId}/items`, {
+        item_type: 'event',
+        title: event.title,
+        description: event.venue || '',
+        date: event.date || '',
+        time: '',
+        location: event.venue || '',
+        price: event.price ? parseFloat(event.price.replace(/[^0-9.]/g, '')) : 0,
+        url: event.url || '',
+        image_url: '',
+        status: 'planned',
+        order_index: 0
       })
-
-      const data = await response.json()
       if (data.success) {
         alert('Event added to travel plan successfully!')
         fetchItineraries() // Refresh the travel plans
@@ -170,20 +160,11 @@ export default function ItinerariesPage() {
         budget: newItinerary.budget ? parseFloat(newItinerary.budget) : null
       })
       
-      const response = await fetch('http://127.0.0.1:5001/api/itineraries', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_id: user.id,
-          ...newItinerary,
-          budget: newItinerary.budget ? parseFloat(newItinerary.budget) : null
-        }),
+      const data = await apiClient.post('/api/itineraries', {
+        user_id: user.id,
+        ...newItinerary,
+        budget: newItinerary.budget ? parseFloat(newItinerary.budget) : null
       })
-
-      console.log('Response status:', response.status)
-      const data = await response.json()
       console.log('Response data:', data)
       
       if (data.success) {
@@ -223,11 +204,9 @@ export default function ItinerariesPage() {
     if (!confirm('Are you sure you want to delete this travel plan?')) return
 
     try {
-      const response = await fetch(`http://127.0.0.1:5001/api/itineraries/${id}`, {
-        method: 'DELETE',
-      })
-
-      if (response.ok) {
+      const data = await apiClient.delete(`/api/itineraries/${id}`)
+      
+      if (data.success) {
         setTravelPlans(travelPlans.filter(travelPlan => travelPlan.id !== id))
       } else {
         alert('Failed to delete travel plan')
