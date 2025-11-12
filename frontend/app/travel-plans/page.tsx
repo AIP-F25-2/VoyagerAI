@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/apiClient'
 import Link from 'next/link'
 
@@ -299,8 +298,9 @@ export default function ItinerariesPage() {
             <form onSubmit={handleCreateItinerary} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Title *</label>
+                  <label htmlFor="itinerary_title" className="block text-sm font-medium mb-2">Title *</label>
                   <input
+                    id="itinerary_title"
                     type="text"
                     value={newItinerary.title}
                     onChange={(e) => setNewItinerary({...newItinerary, title: e.target.value})}
@@ -309,8 +309,9 @@ export default function ItinerariesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Destination</label>
+                  <label htmlFor="itinerary_destination" className="block text-sm font-medium mb-2">Destination</label>
                   <input
+                    id="itinerary_destination"
                     type="text"
                     value={newItinerary.destination}
                     onChange={(e) => setNewItinerary({...newItinerary, destination: e.target.value})}
@@ -406,22 +407,15 @@ export default function ItinerariesPage() {
                         {savedEvents.map((event, index) => {
                           const isSelected = selectedEvents.some(e => e.title === event.title)
                           return (
-                            <div 
-                              key={index} 
-                              role="button"
-                              tabIndex={0}
-                              className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                            <button
+                              key={event.id || index}
+                              type="button"
+                              className={`p-3 rounded-lg cursor-pointer transition-colors w-full text-left ${
                                 isSelected 
                                   ? 'bg-blue-600/50 border-2 border-blue-400' 
                                   : 'bg-gray-600/50 hover:bg-gray-500/50'
                               }`}
                               onClick={() => toggleEventSelection(event)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault();
-                                  toggleEventSelection(event);
-                                }
-                              }}
                             >
                               <div className="flex items-center justify-between mb-2">
                                 <h4 className="font-medium text-sm">{event.title}</h4>
@@ -430,7 +424,7 @@ export default function ItinerariesPage() {
                               {event.venue && <p className="text-xs text-gray-300 mb-1">📍 {event.venue}</p>}
                               {event.date && <p className="text-xs text-gray-300 mb-1">📅 {event.date}</p>}
                               {event.price && <p className="text-xs text-green-400">💰 {event.price}</p>}
-                            </div>
+                            </button>
                           )
                         })}
                       </div>

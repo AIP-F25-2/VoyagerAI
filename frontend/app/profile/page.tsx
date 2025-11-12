@@ -127,16 +127,16 @@ export default function ProfilePage() {
         {/* Saved Events */}
         <div className="bg-gray-800/50 p-6 rounded-lg">
           <h2 className="text-2xl font-bold mb-6">Your Saved Events</h2>
-          {loading ? (
-            <p>Loading your favorites...</p>
-          ) : favorites.length === 0 ? (
+          {loading && <p>Loading your favorites...</p>}
+          {!loading && favorites.length === 0 && (
             <div className="text-center py-12">
               <p className="text-gray-400 text-lg mb-4">No saved events yet</p>
               <a href="/" className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg">
                 Discover Events
               </a>
             </div>
-          ) : (
+          )}
+          {!loading && favorites.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {favorites.map((favorite) => (
                 <div key={favorite.id} className="bg-gray-700/50 p-4 rounded-lg">

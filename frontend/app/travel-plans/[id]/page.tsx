@@ -304,11 +304,8 @@ export default function ItineraryDetailPage() {
     return 'On Track'
   }
 
-  const getProgressBarColorClass = (percentage: number): string => {
-    if (percentage >= 100) return 'bg-red-500'
-    if (percentage >= 80) return 'bg-yellow-500'
-    return 'bg-green-500'
-  }
+  // Reuse getBudgetStatusBadgeClass for progress bar color
+  const getProgressBarColorClass = getBudgetStatusBadgeClass
 
   const getRemainingBudgetClass = (remaining: number): string => {
     return remaining >= 0 ? 'text-green-400' : 'text-red-400'
@@ -965,8 +962,8 @@ export default function ItineraryDetailPage() {
               <p className="text-gray-400 text-center py-4">No saved events yet. Go to the main page and save some events!</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {savedEvents.map((event, index) => (
-                  <div key={index} className="bg-gray-700/50 p-4 rounded-lg hover:bg-gray-600/50 transition-colors">
+                {savedEvents.map((event) => (
+                  <div key={event.id || event.title || `event-${event.url}`} className="bg-gray-700/50 p-4 rounded-lg hover:bg-gray-600/50 transition-colors">
                     <h4 className="font-semibold mb-2">{event.title}</h4>
                     {event.venue && <p className="text-sm text-gray-300 mb-2">📍 {event.venue}</p>}
                     {event.date && <p className="text-sm text-gray-300 mb-2">📅 {event.date}</p>}
@@ -1035,8 +1032,8 @@ export default function ItineraryDetailPage() {
             
             {!hotelSearchLoading && hotelSearchResults.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {hotelSearchResults.map((hotel, index) => (
-                  <div key={index} className="bg-gray-700/50 p-4 rounded-lg hover:bg-gray-600/50 transition-colors">
+                {hotelSearchResults.map((hotel) => (
+                  <div key={hotel.id || hotel.name || hotel.url || `hotel-${hotel.address}`} className="bg-gray-700/50 p-4 rounded-lg hover:bg-gray-600/50 transition-colors">
                     <h4 className="font-semibold mb-2">{hotel.name}</h4>
                     {hotel.address && <p className="text-sm text-gray-300 mb-2">📍 {hotel.address}</p>}
                     {hotel.city && <p className="text-sm text-gray-300 mb-2">🏙️ {hotel.city}</p>}
@@ -1129,7 +1126,11 @@ export default function ItineraryDetailPage() {
                                 <span className="mr-2">{getItemTypeIcon(i.item_type)}</span>
                                 {i.title}
                               </span>
-                              {i.price ? <span className="text-green-400">${i.price.toLocaleString()}</span> : <span className="text-gray-500">—</span>}
+                              {i.price ? (
+                                <span className="text-green-400">${i.price.toLocaleString()}</span>
+                              ) : (
+                                <span className="text-gray-500">—</span>
+                              )}
                             </div>
                           ))}
                         </div>
