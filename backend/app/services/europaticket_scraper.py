@@ -12,6 +12,7 @@ Usage:
 """
 
 import requests
+from typing import Optional
 from bs4 import BeautifulSoup
 import pandas as pd
 import time
