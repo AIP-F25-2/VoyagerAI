@@ -1,0 +1,6 @@
+Collecting bleach
+  Downloading bleach-6.2.0-py3-none-any.whl (163 kB)
+Collecting webencodings
+  Downloading webencodings-0.5.1-py2.py3-none-any.whl (11 kB)
+Installing collected packages: webencodings, bleach
+Successfully installed bleach-6.2.0 webencodings-0.5.1
