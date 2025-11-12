@@ -156,6 +156,11 @@ export default function HomePage() {
     setLoading(true);
     setError(null);
     console.log('🔄 Loading events with:', { search, detectedCity, appliedFilters, searchMode });
+    console.log('🔄 Current state before load:', { 
+      ticketmasterCount: ticketmasterEvents.length, 
+      eventbriteCount: eventbriteEvents.length, 
+      csvCount: csvEvents.length 
+    });
     try {
       if (searchMode === "hotels") {
         // Search hotels
@@ -207,6 +212,16 @@ export default function HomePage() {
           const ebEvents = Array.isArray(data.eventbrite) ? data.eventbrite : [];
           const csvEvts = Array.isArray(data.csv_events) ? data.csv_events : [];
           
+          // Debug: Log what we received before setting
+          console.log('📦 Received data from API:', {
+            ticketmaster: tmEvents.length,
+            eventbrite: ebEvents.length,
+            csv: csvEvts.length,
+            firstTMName: tmEvents.length > 0 ? tmEvents[0]?.name : 'none',
+            firstEBName: ebEvents.length > 0 ? ebEvents[0]?.name : 'none',
+            firstCSVName: csvEvts.length > 0 ? csvEvts[0]?.name : 'none'
+          });
+          
           // Set all states together to ensure proper updates
           setTicketmasterEvents(tmEvents);
           setEventbriteEvents(ebEvents);
@@ -216,8 +231,7 @@ export default function HomePage() {
           console.log('✅ Setting events state:', {
             ticketmaster: tmEvents.length,
             eventbrite: ebEvents.length,
-            csv: csvEvts.length,
-            firstTMName: tmEvents.length > 0 ? tmEvents[0]?.name : 'none'
+            csv: csvEvts.length
           });
         } else if (data.merged && Array.isArray(data.merged) && data.merged.length > 0) {
           // Fallback: Split merged array by source (for Elasticsearch responses)
@@ -264,12 +278,32 @@ export default function HomePage() {
     fetchUserCity();
   }, []);
 
+  // Initial load on mount - load events immediately
   useEffect(() => {
-    // Always load events on mount or when dependencies change
-    // Use city from filters if available, otherwise use detected city, otherwise empty (backend will default)
-    const cityToUse = filters.city || city || "";
-    loadEvents(query, cityToUse, filters, searchType);
-  }, [city, filters, searchType, query]);
+    console.log('🔄 Initial mount - loading events');
+    loadEvents("", "", {}, "events");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load events when city, searchType, or query changes
+  useEffect(() => {
+    // Skip initial mount (handled by the effect above)
+    const cityToUse = filters?.city || city || "";
+    console.log('🔄 useEffect triggered (city/query/searchType):', { city, filters, searchType, query, cityToUse });
+    loadEvents(query, cityToUse, filters || {}, searchType);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [city, searchType, query]);
+  
+  // Separate effect for filter changes to avoid dependency issues
+  useEffect(() => {
+    // Skip if filters is empty object (initial state) - initial load is handled separately
+    if (filters && Object.keys(filters).length > 0) {
+      const cityToUse = filters?.city || city || "";
+      console.log('🔄 Filter change detected, reloading events:', { filters, cityToUse });
+      loadEvents(query, cityToUse, filters, searchType);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(filters)]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
