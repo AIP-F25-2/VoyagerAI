@@ -29,7 +29,7 @@ export default function HomePage() {
   const fetchUserCity = async () => {
     if (!navigator.geolocation) return;
 
-    navigator.geolocation.getCurrentPosition(
+    navigator.geolocation.getCurrentPosition(  // NOSONAR typescript:S5604 - User consent required, necessary feature
       async (position) => {
         const { latitude, longitude } = position.coords;
         try {

@@ -90,7 +90,7 @@ def sanitize_url(url: str) -> str:
     # Security Hotspot Review: This code checks if URLs start with 'http://' or 'https://' for validation.
     # This is NOT an insecure use of HTTP - it's a security check to ensure only valid HTTP/HTTPS URLs
     # are allowed. The function rejects invalid URLs and only accepts http:// or https:// protocols.
-    if not (url.startswith('http://') or url.startswith('https://')):
+    if not (url.startswith('http://') or url.startswith('https://')):  # NOSONAR python:S5332 - URL validation check, not insecure use
         return ""
     
     # Clean the URL

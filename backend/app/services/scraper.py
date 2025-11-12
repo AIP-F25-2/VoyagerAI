@@ -64,7 +64,7 @@ def scroll_until_stable(page, max_loops=18, pause=0.6):
         # Security Hotspot Review: random.uniform() is used for timing delays in web scraping.
         # This is NOT security-sensitive as it's only used to randomize delays to avoid detection,
         # not for cryptographic purposes. The pseudorandom number generator is sufficient.
-        time.sleep(pause + random.uniform(0.05, 0.25))
+        time.sleep(pause + random.uniform(0.05, 0.25))  # NOSONAR python:S2245 - Non-cryptographic timing delay
         try:
             h = page.evaluate("document.body.scrollHeight")
         except (TimeoutError, AttributeError, TypeError):
@@ -337,7 +337,7 @@ def retry_goto(page, url, attempts=3, wait="domcontentloaded", timeout=60000):
         except Exception as e:
             last = e
             # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
-            time.sleep(1.2 + i*0.8 + random.uniform(0.2, 0.6))
+            time.sleep(1.2 + i*0.8 + random.uniform(0.2, 0.6))  # NOSONAR python:S2245 - Non-cryptographic timing delay
     return False, last
 
 def _create_bms_browser_context(p, ua):
@@ -451,7 +451,7 @@ def _scrape_bms_events_from_links(page, links):
             print("  -> Failed to extract data")
         
         # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
-        time.sleep(1 + random.uniform(0.1, 0.5))
+        time.sleep(1 + random.uniform(0.1, 0.5))  # NOSONAR python:S2245 - Non-cryptographic timing delay
     
     return rows
 
@@ -460,7 +460,7 @@ def scrape_bookmyshow_events(city="Mumbai", limit=10):
     # Security Hotspot Review: random.choice() is used for selecting user agents for web scraping.
     # This is NOT security-sensitive as it's only used to randomize HTTP headers to avoid detection,
     # not for cryptographic purposes. The pseudorandom number generator is sufficient for this use case.
-    ua = random.choice(BMS_UAS)
+    ua = random.choice(BMS_UAS)  # NOSONAR python:S2245 - Non-cryptographic use for web scraping
     rows = []
 
     with sync_playwright() as p:

@@ -26,7 +26,7 @@ def create_app():
     # Authorization headers, which are not vulnerable to CSRF attacks. CORS is properly configured
     # to restrict origins. This security hotspot has been reviewed and determined to be safe for
     # this use case. See: https://owasp.org/www-community/attacks/csrf
-    app = Flask(__name__)
+    app = Flask(__name__)  # NOSONAR python:S4502 - JWT-based API, not vulnerable to CSRF
 
     # Validate required environment variables
     required_vars = ['JWT_SECRET_KEY']
@@ -46,7 +46,7 @@ def create_app():
     # Security Hotspot Review: HTTP is used in the default value for localhost development only.
     # In production, FRONTEND_ORIGINS should be set via environment variable with HTTPS URLs.
     # Localhost HTTP is safe for local development and is not a security risk.
-    origins_env = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000,http://localhost:3001")
+    origins_env = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000,http://localhost:3001")  # NOSONAR python:S5332 - Localhost dev only
     allowed_origins = [o.strip() for o in origins_env.split(',') if o.strip()]
     CORS(app, resources={r"/api/*": {"origins": allowed_origins}})
 

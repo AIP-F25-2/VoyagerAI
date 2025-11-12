@@ -33,7 +33,7 @@ def scroll_until_stable(page, max_loops=18, pause=0.6):
     last = 0; stable = 0
     for _ in range(max_loops):
         # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
-        page.mouse.wheel(0, 2400); time.sleep(pause + random.uniform(0.05, 0.25))
+        page.mouse.wheel(0, 2400); time.sleep(pause + random.uniform(0.05, 0.25))  # NOSONAR python:S2245 - Non-cryptographic timing delay
         try:
             h = page.evaluate("document.body.scrollHeight")
         except (TimeoutError, AttributeError, TypeError):
@@ -249,7 +249,7 @@ def retry_goto(page, url, attempts=3, wait="domcontentloaded", timeout=60000):
         except Exception as e:
             last = e
             # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
-            time.sleep(1.2 + i*0.8 + random.uniform(0.2, 0.6))
+            time.sleep(1.2 + i*0.8 + random.uniform(0.2, 0.6))  # NOSONAR python:S2245 - Non-cryptographic timing delay
     return False, last
 
 def _free_port(start=8000):
@@ -280,7 +280,7 @@ def scrape_bookmyshow_events(city="Mumbai", limit=100, headless=True):
     # Security Hotspot Review: random.choice() is used for selecting user agents for web scraping.
     # This is NOT security-sensitive as it's only used to randomize HTTP headers to avoid detection,
     # not for cryptographic purposes. The pseudorandom number generator is sufficient for this use case.
-    ua = random.choice(UAS)
+    ua = random.choice(UAS)  # NOSONAR python:S2245 - Non-cryptographic use for web scraping
     rows = []
 
     with sync_playwright() as p:
@@ -293,7 +293,7 @@ def scrape_bookmyshow_events(city="Mumbai", limit=100, headless=True):
             locale="en-IN",
             timezone_id="Asia/Kolkata",
             user_agent=ua,
-            viewport={"width": random.randint(1280, 1600), "height": random.randint(800, 1000)},
+            viewport={"width": random.randint(1280, 1600), "height": random.randint(800, 1000)},  # NOSONAR python:S2245 - Non-cryptographic viewport randomization
             java_script_enabled=True,
         )
         # light stealth
@@ -303,12 +303,12 @@ def scrape_bookmyshow_events(city="Mumbai", limit=100, headless=True):
 
         ok, err = retry_goto(page, home(city))
         # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
-        consent(page); time.sleep(0.3 + random.uniform(0.1, 0.4))
+        consent(page); time.sleep(0.3 + random.uniform(0.1, 0.4))  # NOSONAR python:S2245 - Non-cryptographic timing delay
         if not ok: print("[warn] home nav failed:", err)
 
         ok, err = retry_goto(page, events(city))
         # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
-        consent(page); time.sleep(0.3 + random.uniform(0.1, 0.4))
+        consent(page); time.sleep(0.3 + random.uniform(0.1, 0.4))  # NOSONAR python:S2245 - Non-cryptographic timing delay
         if not ok: print("[warn] events nav failed:", err)
 
         scroll_until_stable(page)
@@ -319,14 +319,14 @@ def scrape_bookmyshow_events(city="Mumbai", limit=100, headless=True):
             print(f"[{i}/{min(len(links), limit)}] {url}")
             ok, err = retry_goto(page, url, attempts=3, wait="domcontentloaded", timeout=60000)
             # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
-            consent(page); time.sleep(0.35 + random.uniform(0.05, 0.35))
+            consent(page); time.sleep(0.35 + random.uniform(0.05, 0.35))  # NOSONAR python:S2245 - Non-cryptographic timing delay
             if not ok:
                 print("  -> skip (nav failed):", err)
                 continue
             data = parse_event(page); data["url"] = url
             rows.append(data)
             # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
-            time.sleep(0.25 + random.uniform(0.05, 0.25))
+            time.sleep(0.25 + random.uniform(0.05, 0.25))  # NOSONAR python:S2245 - Non-cryptographic timing delay
 
         ctx.close(); browser.close()
 
