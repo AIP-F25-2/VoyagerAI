@@ -52,7 +52,7 @@ def consent(page):
                 loc.click()
                 time.sleep(0.2)
                 return
-        except: 
+        except (TimeoutError, AttributeError, TypeError):
             pass
 
 def scroll_until_stable(page, max_loops=18, pause=0.6):
@@ -63,7 +63,7 @@ def scroll_until_stable(page, max_loops=18, pause=0.6):
         time.sleep(pause + random.uniform(0.05, 0.25))
         try:
             h = page.evaluate("document.body.scrollHeight")
-        except:
+        except (TimeoutError, AttributeError, TypeError):
             break
         if h == last:
             stable += 1

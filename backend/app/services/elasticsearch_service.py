@@ -134,69 +134,77 @@ class ElasticsearchService:
             print(f"❌ Failed to create index: {e}")
             return False
     
+    def _extract_event_date(self, event: Dict[str, Any]) -> Optional[str]:
+        """Extract and format event date."""
+        if not event.get("dates") or not event["dates"].get("start"):
+            return None
+        date_str = event["dates"]["start"].get("localDate")
+        if not date_str:
+            return None
+        try:
+            return datetime.strptime(date_str, "%Y-%m-%d").date().isoformat()
+        except (ValueError, TypeError):
+            return None
+
+    def _extract_price_range(self, event: Dict[str, Any]) -> tuple:
+        """Extract price min and max from event."""
+        price_min = None
+        price_max = None
+        if event.get("priceRanges") and isinstance(event["priceRanges"], list) and len(event["priceRanges"]) > 0:
+            pr = event["priceRanges"][0]
+            if isinstance(pr, dict):
+                price_min = pr.get("min")
+                price_max = pr.get("max")
+        return price_min, price_max
+
+    def _extract_venue_info(self, event: Dict[str, Any]) -> tuple:
+        """Extract venue and city from event."""
+        city = None
+        venue = None
+        if event.get("_embedded") and event["_embedded"].get("venues"):
+            venues = event["_embedded"]["venues"]
+            if venues and len(venues) > 0:
+                city = venues[0].get("city", {}).get("name")
+                venue = venues[0].get("name")
+        return venue, city
+
+    def _extract_image_url(self, event: Dict[str, Any]) -> Optional[str]:
+        """Extract image URL from event."""
+        if event.get("images") and isinstance(event["images"], list) and len(event["images"]) > 0:
+            return event["images"][0].get("url")
+        return None
+
+    def _build_event_document(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        """Build Elasticsearch document from event data."""
+        event_date = self._extract_event_date(event)
+        price_min, price_max = self._extract_price_range(event)
+        venue, city = self._extract_venue_info(event)
+        image_url = self._extract_image_url(event)
+        
+        return {
+            "id": event.get("id"),
+            "name": event.get("name", ""),
+            "description": event.get("description", ""),
+            "url": event.get("url"),
+            "source": event.get("source", "unknown"),
+            "date": event_date,
+            "time": event.get("dates", {}).get("start", {}).get("localTime") if event.get("dates") else None,
+            "city": city,
+            "venue": venue,
+            "category": event.get("category", {}).get("name") if isinstance(event.get("category"), dict) else None,
+            "price_min": price_min,
+            "price_max": price_max,
+            "image_url": image_url,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+
     def index_event(self, event: Dict[str, Any]) -> bool:
         """Index a single event."""
         if not self.is_available():
             return False
         
         try:
-            # Extract date
-            event_date = None
-            if event.get("dates") and event["dates"].get("start"):
-                date_str = event["dates"]["start"].get("localDate")
-                if date_str:
-                    try:
-                        event_date = datetime.strptime(date_str, "%Y-%m-%d").date().isoformat()
-                    except:
-                        pass
-            
-            # Extract price range
-            price_min = None
-            price_max = None
-            if event.get("priceRanges") and isinstance(event["priceRanges"], list) and len(event["priceRanges"]) > 0:
-                pr = event["priceRanges"][0]
-                if isinstance(pr, dict):
-                    price_min = pr.get("min")
-                    price_max = pr.get("max")
-            
-            # Extract city
-            city = None
-            if event.get("_embedded") and event["_embedded"].get("venues"):
-                venues = event["_embedded"]["venues"]
-                if venues and len(venues) > 0:
-                    city = venues[0].get("city", {}).get("name")
-            
-            # Extract venue
-            venue = None
-            if event.get("_embedded") and event["_embedded"].get("venues"):
-                venues = event["_embedded"]["venues"]
-                if venues and len(venues) > 0:
-                    venue = venues[0].get("name")
-            
-            # Extract image
-            image_url = None
-            if event.get("images") and isinstance(event["images"], list) and len(event["images"]) > 0:
-                image_url = event["images"][0].get("url")
-            
-            # Build document
-            doc = {
-                "id": event.get("id"),
-                "name": event.get("name", ""),
-                "description": event.get("description", ""),
-                "url": event.get("url"),
-                "source": event.get("source", "unknown"),
-                "date": event_date,
-                "time": event.get("dates", {}).get("start", {}).get("localTime") if event.get("dates") else None,
-                "city": city,
-                "venue": venue,
-                "category": event.get("category", {}).get("name") if isinstance(event.get("category"), dict) else None,
-                "price_min": price_min,
-                "price_max": price_max,
-                "image_url": image_url,
-                "created_at": datetime.now(timezone.utc).isoformat()
-            }
-            
-            # Index the document
+            doc = self._build_event_document(event)
             self.client.index(
                 index=self.index_name,
                 id=event.get("id"),

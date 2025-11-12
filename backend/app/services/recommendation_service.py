@@ -36,6 +36,22 @@ class RecommendationService:
             logger.error(f"Error getting recommendations for {user_email}: {e}")
             return self._get_popular_events(limit)
     
+    def _get_time_slot(self, hour: int) -> str:
+        """Get time slot category from hour."""
+        if 6 <= hour < 12:
+            return "morning"
+        elif 12 <= hour < 17:
+            return "afternoon"
+        elif 17 <= hour < 21:
+            return "evening"
+        else:
+            return "night"
+
+    def _update_preference_count(self, preferences: Dict, key: str, value: str):
+        """Update preference count for a given key-value pair."""
+        if value:
+            preferences[key][value] = preferences[key].get(value, 0) + 1
+
     def _analyze_user_preferences(self, favorites: List[Favorite]) -> Dict[str, Any]:
         """Analyze user's favorite events to understand preferences"""
         preferences = {
@@ -47,36 +63,19 @@ class RecommendationService:
         }
         
         for fav in favorites:
-            # City preferences
-            if fav.city:
-                preferences["preferred_cities"][fav.city] = preferences["preferred_cities"].get(fav.city, 0) + 1
+            self._update_preference_count(preferences, "preferred_cities", fav.city)
+            self._update_preference_count(preferences, "preferred_venues", fav.venue)
             
-            # Venue preferences
-            if fav.venue:
-                preferences["preferred_venues"][fav.venue] = preferences["preferred_venues"].get(fav.venue, 0) + 1
-            
-            # Time preferences (if time is available)
             if fav.time:
-                hour = fav.time.hour
-                if 6 <= hour < 12:
-                    time_slot = "morning"
-                elif 12 <= hour < 17:
-                    time_slot = "afternoon"
-                elif 17 <= hour < 21:
-                    time_slot = "evening"
-                else:
-                    time_slot = "night"
-                preferences["preferred_times"][time_slot] = preferences["preferred_times"].get(time_slot, 0) + 1
+                time_slot = self._get_time_slot(fav.time.hour)
+                self._update_preference_count(preferences, "preferred_times", time_slot)
             
-            # Day preferences
             if fav.date:
                 day_of_week = fav.date.strftime("%A").lower()
-                preferences["preferred_days"][day_of_week] = preferences["preferred_days"].get(day_of_week, 0) + 1
+                self._update_preference_count(preferences, "preferred_days", day_of_week)
             
-            # Category preferences (infer from title keywords)
             category = self._infer_category_from_title(fav.title)
-            if category:
-                preferences["preferred_categories"][category] = preferences["preferred_categories"].get(category, 0) + 1
+            self._update_preference_count(preferences, "preferred_categories", category)
         
         return preferences
     

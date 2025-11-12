@@ -114,15 +114,12 @@ def _extract_description(soup):
     return None
 
 
-def _extract_venue_and_city(soup):
-    """Extract venue and city from soup."""
-    venue = None
-    city = None
-    
-    # try anchor pattern
+def _extract_venue_from_anchor(soup):
+    """Extract venue and city from venue anchor links."""
     for a in soup.find_all("a", href=True):
         if "/venue/" in a["href"]:
             venue = a.get_text(strip=True)
+            city = None
             parent = a.find_parent()
             if parent:
                 parent_text = parent.get_text(" |,:\n", strip=True)
@@ -130,16 +127,24 @@ def _extract_venue_and_city(soup):
                     pieces = [p.strip() for p in parent_text.split(",") if p.strip()]
                     if len(pieces) >= 2 and pieces[0] != venue:
                         city = pieces[-1]
-            break
-    
-    # fallback: look for elements with 'venue' in class
+            return venue, city
+    return None, None
+
+
+def _extract_venue_from_class(soup):
+    """Extract venue from elements with venue-related classes."""
+    for cls in ("venue", "event-venue", "place"):
+        el = soup.find(class_=lambda c, cls_val=cls: c and cls_val in c)
+        if el:
+            return el.get_text(" ", strip=True)
+    return None
+
+
+def _extract_venue_and_city(soup):
+    """Extract venue and city from soup."""
+    venue, city = _extract_venue_from_anchor(soup)
     if not venue:
-        for cls in ("venue", "event-venue", "place"):
-            el = soup.find(class_=lambda c, cls_val=cls: c and cls_val in c)
-            if el:
-                venue = el.get_text(" ", strip=True)
-                break
-    
+        venue = _extract_venue_from_class(soup)
     return venue, city
 
 

@@ -375,75 +375,62 @@ Be friendly, concise, and helpful. When you have real event data, use it to give
                 "error": str(e)
             }
     
-    def generate_itinerary_suggestions(
-        self,
-        destination: str,
-        start_date: str,
-        end_date: str,
-        events: List[Dict[str, Any]],
-        hotels: List[Dict[str, Any]],
-        preferences: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """Generate AI-powered itinerary suggestions"""
-        if not self.is_available():
-            return {
-                "success": False,
-                "error": "LLM service is not available"
+    def _calculate_trip_duration(self, start_date: str, end_date: str) -> tuple:
+        """Calculate trip duration and return start, end dates and number of days."""
+        from datetime import datetime, timedelta
+        start = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end = datetime.strptime(end_date, "%Y-%m-%d").date()
+        num_days = (end - start).days + 1
+        return start, end, num_days
+
+    def _format_events_for_prompt(self, events: List[Dict], destination: str, limit: int = 30) -> List[Dict]:
+        """Format events for LLM prompt."""
+        return [
+            {
+                "title": event.get("title", "Unknown"),
+                "date": event.get("date", ""),
+                "time": event.get("time", ""),
+                "venue": event.get("venue", "TBA"),
+                "city": event.get("city", destination)
             }
+            for event in events[:limit]
+        ]
+
+    def _format_hotels_for_prompt(self, hotels: List[Dict], destination: str, limit: int = 15) -> List[Dict]:
+        """Format hotels for LLM prompt."""
+        return [
+            {
+                "name": hotel.get("name", "Unknown Hotel"),
+                "city": hotel.get("city", destination),
+                "address": hotel.get("address", ""),
+                "rating": hotel.get("rating", ""),
+                "price_per_night": hotel.get("price_per_night", "")
+            }
+            for hotel in hotels[:limit]
+        ]
+
+    def _build_preferences_sections(self, preferences: Optional[Dict]) -> tuple:
+        """Build budget, hints, and description sections from preferences."""
+        budget_info = ""
+        if preferences and preferences.get("budget"):
+            budget_info = f"\nBudget: ${preferences['budget']:,.2f}"
         
-        try:
-            from datetime import datetime, timedelta
-            
-            # Calculate number of days
-            start = datetime.strptime(start_date, "%Y-%m-%d").date()
-            end = datetime.strptime(end_date, "%Y-%m-%d").date()
-            num_days = (end - start).days + 1
-            
-            # Group events by date
-            events_by_date = {}
-            for event in events:
-                event_date = event.get("date", "")
-                if event_date:
-                    if event_date not in events_by_date:
-                        events_by_date[event_date] = []
-                    events_by_date[event_date].append(event)
-            
-            # Format events for prompt (limit to most relevant)
-            formatted_events = []
-            for event in events[:30]:  # Top 30 events
-                formatted_events.append({
-                    "title": event.get("title", "Unknown"),
-                    "date": event.get("date", ""),
-                    "time": event.get("time", ""),
-                    "venue": event.get("venue", "TBA"),
-                    "city": event.get("city", destination)
-                })
-            
-            # Format hotels for prompt
-            formatted_hotels = []
-            for hotel in hotels[:15]:  # Top 15 hotels
-                formatted_hotels.append({
-                    "name": hotel.get("name", "Unknown Hotel"),
-                    "city": hotel.get("city", destination),
-                    "address": hotel.get("address", ""),
-                    "rating": hotel.get("rating", ""),
-                    "price_per_night": hotel.get("price_per_night", "")
-                })
-            
-            budget_info = ""
-            if preferences and preferences.get("budget"):
-                budget_info = f"\nBudget: ${preferences['budget']:,.2f}"
-            
-            # Add user hints/instructions if provided
-            hints_section = ""
-            if preferences and preferences.get("hints"):
-                hints_section = f"\n\nUSER PREFERENCES AND HINTS:\n{preferences['hints']}\n\nPlease incorporate these preferences into the itinerary."
-            
-            description_section = ""
-            if preferences and preferences.get("description"):
-                description_section = f"\n\nTrip Description: {preferences['description']}"
-            
-            prompt = f"""You are an expert travel planner. Create a detailed {num_days}-day itinerary for {destination} from {start_date} to {end_date}.{budget_info}{description_section}{hints_section}
+        hints_section = ""
+        if preferences and preferences.get("hints"):
+            hints_section = f"\n\nUSER PREFERENCES AND HINTS:\n{preferences['hints']}\n\nPlease incorporate these preferences into the itinerary."
+        
+        description_section = ""
+        if preferences and preferences.get("description"):
+            description_section = f"\n\nTrip Description: {preferences['description']}"
+        
+        return budget_info, hints_section, description_section
+
+    def _build_itinerary_prompt(self, destination: str, start_date: str, end_date: str,
+                                num_days: int, formatted_events: List[Dict],
+                                formatted_hotels: List[Dict], budget_info: str,
+                                hints_section: str, description_section: str) -> str:
+        """Build the complete itinerary generation prompt."""
+        return f"""You are an expert travel planner. Create a detailed {num_days}-day itinerary for {destination} from {start_date} to {end_date}.{budget_info}{description_section}{hints_section}
 
 Available Events ({len(formatted_events)} events):
 {json.dumps(formatted_events, indent=2)}
@@ -482,56 +469,90 @@ Return ONLY valid JSON in this exact format:
 
 Return ONLY the JSON object, no markdown, no code blocks, no explanations."""
 
-            # Try with response_format (for newer OpenAI API versions)
-            try:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": "You are a travel planning expert. You MUST respond with valid JSON only. No markdown, no code blocks, just pure JSON."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.7,
-                    max_tokens=2000,
-                    response_format={"type": "json_object"}
-                )
-            except TypeError:
-                # Fallback for older API versions that don't support response_format
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {"role": "system", "content": "You are a travel planning expert. You MUST respond with valid JSON only. No markdown, no code blocks, just pure JSON."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.7,
-                    max_tokens=2000
-                )
-            
-            content = response.choices[0].message.content.strip()
-            
-            # Clean up response
-            if content.startswith("```"):
-                parts = content.split("```")
-                if len(parts) > 1:
-                    content = parts[1]
-                    if content.startswith("json"):
-                        content = content[4:]
-                content = content.strip()
-            
-            # Remove any leading/trailing whitespace or newlines
+    def _call_llm_for_itinerary(self, prompt: str) -> str:
+        """Call LLM API to generate itinerary."""
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are a travel planning expert. You MUST respond with valid JSON only. No markdown, no code blocks, just pure JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=2000,
+                response_format={"type": "json_object"}
+            )
+            return response.choices[0].message.content.strip()
+        except TypeError:
+            # Fallback for older API versions
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are a travel planning expert. You MUST respond with valid JSON only. No markdown, no code blocks, just pure JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=2000
+            )
+            return response.choices[0].message.content.strip()
+
+    def _clean_json_response(self, content: str) -> str:
+        """Clean up JSON response from LLM."""
+        if content.startswith("```"):
+            parts = content.split("```")
+            if len(parts) > 1:
+                content = parts[1]
+                if content.startswith("json"):
+                    content = content[4:]
             content = content.strip()
+        return content.strip()
+
+    def _validate_and_enhance_itinerary(self, itinerary: Dict, start) -> Dict:
+        """Validate and enhance itinerary with dates."""
+        if "itinerary" not in itinerary:
+            raise ValueError("Invalid response: missing 'itinerary' field")
+        
+        from datetime import timedelta
+        current_date = start
+        for day_plan in itinerary.get("itinerary", []):
+            if "date" not in day_plan or not day_plan["date"]:
+                day_plan["date"] = current_date.isoformat()
+            current_date += timedelta(days=1)
+        
+        return itinerary
+
+    def generate_itinerary_suggestions(
+        self,
+        destination: str,
+        start_date: str,
+        end_date: str,
+        events: List[Dict[str, Any]],
+        hotels: List[Dict[str, Any]],
+        preferences: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Generate AI-powered itinerary suggestions"""
+        if not self.is_available():
+            return {
+                "success": False,
+                "error": "LLM service is not available"
+            }
+        
+        try:
+            start, end, num_days = self._calculate_trip_duration(start_date, end_date)
+            formatted_events = self._format_events_for_prompt(events, destination)
+            formatted_hotels = self._format_hotels_for_prompt(hotels, destination)
+            budget_info, hints_section, description_section = self._build_preferences_sections(preferences)
             
+            prompt = self._build_itinerary_prompt(
+                destination, start_date, end_date, num_days,
+                formatted_events, formatted_hotels,
+                budget_info, hints_section, description_section
+            )
+            
+            content = self._call_llm_for_itinerary(prompt)
+            content = self._clean_json_response(content)
             itinerary = json.loads(content)
-            
-            # Validate and enhance itinerary
-            if "itinerary" not in itinerary:
-                raise ValueError("Invalid response: missing 'itinerary' field")
-            
-            # Ensure dates are correct
-            current_date = start
-            for day_plan in itinerary.get("itinerary", []):
-                if "date" not in day_plan or not day_plan["date"]:
-                    day_plan["date"] = current_date.isoformat()
-                current_date += timedelta(days=1)
+            itinerary = self._validate_and_enhance_itinerary(itinerary, start)
             
             return {
                 "success": True,

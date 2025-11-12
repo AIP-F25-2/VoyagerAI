@@ -64,87 +64,93 @@ class NotificationService:
             logger.error(f"Error sending event reminders: {e}")
             return 0
     
+    def _format_event_info(self, fav: Favorite) -> str:
+        """Format a favorite event into a readable string."""
+        event_info = f"• {fav.title}"
+        if fav.date:
+            event_info += f" on {fav.date.strftime('%B %d')}"
+        if fav.venue:
+            event_info += f" at {fav.venue}"
+        return event_info
+
+    def _get_user_favorites(self, user_email: str, today, week_from_now) -> List[Favorite]:
+        """Get user's favorites for the next week."""
+        return Favorite.query.filter(
+            Favorite.user_email == user_email,
+            Favorite.date >= today,
+            Favorite.date <= week_from_now
+        ).order_by(Favorite.date).all()
+
+    def _build_digest_content(self, user, favorites: List[Favorite]) -> tuple:
+        """Build HTML and text content for digest email."""
+        events_list = [self._format_event_info(fav) for fav in favorites]
+        
+        subject = f"Your VoyagerAI Weekly Digest - {len(favorites)} upcoming events"
+        
+        html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #2563eb;">Your Weekly Event Digest</h2>
+            <p>Hi {user.name},</p>
+            <p>Here are your upcoming events for the next week:</p>
+            <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                {''.join([f'<p style="margin: 8px 0;">{event}</p>' for event in events_list])}
+            </div>
+            <p>Have a great week!</p>
+            <p>Best regards,<br>The VoyagerAI Team</p>
+        </body>
+        </html>
+        """
+        
+        text_content = f"""
+        Your Weekly Event Digest
+        
+        Hi {user.name},
+        
+        Here are your upcoming events for the next week:
+                    
+        {chr(10).join(events_list)}
+        
+        Have a great week!
+        
+        Best regards,
+        The VoyagerAI Team
+        """
+        
+        return subject, text_content, html_content
+
+    def _send_digest_to_user(self, user, today, week_from_now):
+        """Send digest email to a single user."""
+        try:
+            favorites = self._get_user_favorites(user.email, today, week_from_now)
+            if not favorites:
+                return
+            
+            subject, text_content, html_content = self._build_digest_content(user, favorites)
+            success = email_service._send_email(
+                to_email=user.email,
+                subject=subject,
+                html_content=html_content,
+                text_content=text_content
+            )
+            
+            if success:
+                logger.info(f"Sent weekly digest to {user.email}")
+        except Exception as e:
+            logger.error(f"Failed to send digest to {user.email}: {e}")
+
     def send_daily_digest(self):
         """Send daily digest of upcoming events"""
         if not self.enabled:
             return
             
         try:
-            # Get events happening in the next 7 days
             today = datetime.now().date()
             week_from_now = today + timedelta(days=7)
-            
-            # Get all verified users
             users = User.query.filter_by(is_verified=True).all()
             
             for user in users:
-                try:
-                    # Get user's favorites for next week
-                    favorites = Favorite.query.filter(
-                        Favorite.user_email == user.email,
-                        Favorite.date >= today,
-                        Favorite.date <= week_from_now
-                    ).order_by(Favorite.date).all()
-                    
-                    if not favorites:
-                        continue
-                    
-                    # Create digest content
-                    events_list = []
-                    for fav in favorites:
-                        event_info = f"• {fav.title}"
-                        if fav.date:
-                            event_info += f" on {fav.date.strftime('%B %d')}"
-                        if fav.venue:
-                            event_info += f" at {fav.venue}"
-                        events_list.append(event_info)
-                    
-                    # Send digest email
-                    subject = f"Your VoyagerAI Weekly Digest - {len(favorites)} upcoming events"
-                    
-                    html_content = f"""
-                    <html>
-                    <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                        <h2 style="color: #2563eb;">Your Weekly Event Digest</h2>
-                        <p>Hi {user.name},</p>
-                        <p>Here are your upcoming events for the next week:</p>
-                        <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                            {''.join([f'<p style="margin: 8px 0;">{event}</p>' for event in events_list])}
-                        </div>
-                        <p>Have a great week!</p>
-                        <p>Best regards,<br>The VoyagerAI Team</p>
-                    </body>
-                    </html>
-                    """
-                    
-                    text_content = f"""
-                    Your Weekly Event Digest
-                    
-                    Hi {user.name},
-                    
-                    Here are your upcoming events for the next week:
-                    
-                    {chr(10).join(events_list)}
-                    
-                    Have a great week!
-                    
-                    Best regards,
-                    The VoyagerAI Team
-                    """
-                    
-                    success = email_service._send_email(
-                        to_email=user.email,
-                        subject=subject,
-                        html_content=html_content,
-                        text_content=text_content
-                    )
-                    
-                    if success:
-                        logger.info(f"Sent weekly digest to {user.email}")
-                    
-                except Exception as e:
-                    logger.error(f"Failed to send digest to {user.email}: {e}")
-                    continue
+                self._send_digest_to_user(user, today, week_from_now)
                     
         except Exception as e:
             logger.error(f"Error sending daily digest: {e}")
