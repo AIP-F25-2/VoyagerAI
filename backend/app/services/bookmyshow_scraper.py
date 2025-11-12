@@ -92,65 +92,150 @@ def first(v):
     if isinstance(v, str): return v
     return None
 
-def parse_jsonld_event(obj):
-    out = {"title": None, "date": None, "time": None, "venue": None, "place": None, "price": None}
-    out["title"] = obj.get("name") or obj.get("headline")
-    iso = first(obj.get("startDate"))
-    if isinstance(iso, str):
-        m = re.match(r"^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})", iso)
-        if m: out["date"], out["time"] = m.group(1), m.group(2)
-    loc = obj.get("location")
+def _parse_start_date(iso):
+    """Parse start date and time from ISO string."""
+    if not isinstance(iso, str):
+        return None, None
+    m = re.match(r"^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})", iso)
+    if m:
+        return m.group(1), m.group(2)
+    return None, None
+
+
+def _parse_location(loc):
+    """Parse venue and place from location object."""
+    venue = None
+    place = None
     if isinstance(loc, dict):
-        out["venue"] = first(loc.get("name"))
+        venue = first(loc.get("name"))
         addr = loc.get("address")
         if isinstance(addr, dict):
-            out["place"] = addr.get("addressLocality") or addr.get("addressRegion")
-    offers = obj.get("offers")
+            place = addr.get("addressLocality") or addr.get("addressRegion")
+    return venue, place
+
+
+def _parse_price_from_dict(offers):
+    """Parse price from offers dictionary."""
+    cur = offers.get("priceCurrency") or ""
+    low = offers.get("lowPrice")
+    high = offers.get("highPrice")
+    p = offers.get("price")
+    
+    if low and high:
+        return f"{cur} {low}-{high}"
+    elif low:
+        return f"{cur} {low}"
+    elif p:
+        return f"{cur} {p}"
+    return None
+
+
+def _parse_price_from_list(offers):
+    """Parse price from offers list."""
+    if not offers:
+        return None
+    cur = offers[0].get("priceCurrency") or ""
+    p = offers[0].get("price")
+    return f"{cur} {p}" if p else None
+
+
+def _parse_price(offers):
+    """Parse price from offers (dict or list)."""
     if isinstance(offers, dict):
-        cur = offers.get("priceCurrency") or ""
-        low, high, p = offers.get("lowPrice"), offers.get("highPrice"), offers.get("price")
-        if low and high: out["price"] = f"{cur} {low}-{high}"
-        elif low:        out["price"] = f"{cur} {low}"
-        elif p:          out["price"] = f"{cur} {p}"
+        return _parse_price_from_dict(offers)
     elif isinstance(offers, list) and offers:
-        cur = offers[0].get("priceCurrency") or ""
-        p = offers[0].get("price"); out["price"] = f"{cur} {p}" if p else None
+        return _parse_price_from_list(offers)
+    return None
+
+
+def parse_jsonld_event(obj):
+    """Parse JSON-LD event object into structured data."""
+    out = {"title": None, "date": None, "time": None, "venue": None, "place": None, "price": None}
+    out["title"] = obj.get("name") or obj.get("headline")
+    
+    # Parse date and time
+    iso = first(obj.get("startDate"))
+    out["date"], out["time"] = _parse_start_date(iso)
+    
+    # Parse location
+    loc = obj.get("location")
+    out["venue"], out["place"] = _parse_location(loc)
+    
+    # Parse price
+    offers = obj.get("offers")
+    out["price"] = _parse_price(offers)
+    
     return out
 
+def _get_script_count(scripts):
+    """Safely get count of script elements."""
+    try:
+        return scripts.count()
+    except (TimeoutError, AttributeError, TypeError):
+        return 0
+
+
+def _parse_script_data(scripts, index):
+    """Parse JSON data from script element at index."""
+    try:
+        data = scripts.nth(index).inner_text()
+        if not data:
+            return None
+        return json.loads(data)
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        return None
+
+
+def _is_event_type(obj):
+    """Check if object is an Event type."""
+    if not isinstance(obj, dict):
+        return False
+    t = obj.get("@type")
+    return t == "Event" or (isinstance(t, list) and "Event" in t)
+
+
+def _merge_event_data(row, event_data):
+    """Merge parsed event data into row."""
+    for k, v in event_data.items():
+        if v and not row[k]:
+            row[k] = v
+
+
+def _extract_events_from_data(data):
+    """Extract event objects from parsed JSON data."""
+    items = data if isinstance(data, list) else [data]
+    return [it for it in items if _is_event_type(it)]
+
+
+def _get_page_title_fallback(page):
+    """Get page title as fallback if no event title found."""
+    try:
+        return (page.title() or "").strip() or None
+    except (TimeoutError, AttributeError, TypeError):
+        return None
+
+
 def parse_event(page):
+    """Parse event data from page JSON-LD scripts."""
     row = {"title": None, "date": None, "time": None, "venue": None, "place": None, "price": None}
     scripts = page.locator("script[type='application/ld+json']")
-    try:
-        n = scripts.count()
-    except (TimeoutError, AttributeError, TypeError):
-        n = 0
+    n = _get_script_count(scripts)
     
     for i in range(n):
-        try:
-            data = scripts.nth(i).inner_text()
-            if not data:
-                continue
-            data = json.loads(data)
-        except (json.JSONDecodeError, AttributeError, TypeError):
+        data = _parse_script_data(scripts, i)
+        if not data:
             continue
         
-        items = data if isinstance(data, list) else [data]
-        for it in items:
-            if isinstance(it, dict):
-                t = it.get("@type")
-                if t == "Event" or (isinstance(t, list) and "Event" in t):
-                    got = parse_jsonld_event(it)
-                    for k, v in got.items():
-                        if v and not row[k]:
-                            row[k] = v
+        events = _extract_events_from_data(data)
+        for event_obj in events:
+            got = parse_jsonld_event(event_obj)
+            _merge_event_data(row, got)
+        
         if row["title"]:
             break
     
     if not row["title"]:
-        try:
-            row["title"] = (page.title() or "").strip() or None
-        except (TimeoutError, AttributeError, TypeError):
-            pass
+        row["title"] = _get_page_title_fallback(page)
     
     return row
 
