@@ -283,17 +283,17 @@ def scrape_bookmyshow_events(city="Mumbai", limit=100, headless=True):
 
     with sync_playwright() as p:
         launch_kwargs = {"headless": headless}
-    browser = p.chromium.launch(**launch_kwargs)
-    # Security Hotspot Review: random.randint() is used for viewport dimensions to randomize browser
-    # fingerprinting during web scraping. This is NOT security-sensitive as it's only used to avoid
-    # detection, not for cryptographic purposes. The pseudorandom number generator is sufficient.
-    ctx = browser.new_context(
-        locale="en-IN",
-        timezone_id="Asia/Kolkata",
-        user_agent=ua,
-        viewport={"width": random.randint(1280, 1600), "height": random.randint(800, 1000)},
-        java_script_enabled=True,
-    )
+        browser = p.chromium.launch(**launch_kwargs)
+        # Security Hotspot Review: random.randint() is used for viewport dimensions to randomize browser
+        # fingerprinting during web scraping. This is NOT security-sensitive as it's only used to avoid
+        # detection, not for cryptographic purposes. The pseudorandom number generator is sufficient.
+        ctx = browser.new_context(
+            locale="en-IN",
+            timezone_id="Asia/Kolkata",
+            user_agent=ua,
+            viewport={"width": random.randint(1280, 1600), "height": random.randint(800, 1000)},
+            java_script_enabled=True,
+        )
         # light stealth
         ctx.add_init_script("Object.defineProperty(navigator,'webdriver',{get:()=>undefined});")
         ctx.set_extra_http_headers({"Accept-Language": "en-IN,en;q=0.9", "Upgrade-Insecure-Requests": "1"})
