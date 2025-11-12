@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from .models import db, Event, Favorite, EventShare, EventReview, Subscription, Itinerary, ItineraryItem, Hotel
 from .__init__ import cache, limiter
+from .utils.error_handler import success_response, error_response, handle_route_exception
 from .services.notification_service import notification_service
 from .services.recommendation_service import recommendation_service
 from .services.llm_service import llm_service
@@ -433,7 +434,7 @@ def get_events():
         end = start + page_size
         merged_page = merged[start:end]
 
-        return jsonify({
+        return success_response({
             "ticketmaster": ticketmaster_events,
             "eventbrite": eventbrite_events,
             "csv_events": csv_events,
@@ -442,7 +443,7 @@ def get_events():
             "source": "fallback"
         })
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/scrape", methods=["POST"])
 def scrape_events():
@@ -474,8 +475,7 @@ def scrape_events():
 
         db.session.commit()
 
-        return jsonify({
-            "success": True,
+        return success_response({
             "message": f"Scraped {len(scraped_events)} events, saved {saved_count} new events",
             "scraped_count": len(scraped_events),
             "saved_count": saved_count,
@@ -483,7 +483,7 @@ def scrape_events():
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/scrape/all", methods=["POST"])
 def scrape_all_sources():
@@ -524,8 +524,7 @@ def scrape_all_sources():
 
         db.session.commit()
 
-        return jsonify({
-            "success": True,
+        return success_response({
             "message": f"Scraped {len(all_events)} events from all sources, saved {saved_count} new events",
             "scraped_count": len(all_events),
             "saved_count": saved_count,
@@ -538,7 +537,7 @@ def scrape_all_sources():
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/scrape/eventbrite", methods=["POST"])
 def scrape_eventbrite_only():
@@ -584,7 +583,7 @@ def scrape_eventbrite_only():
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/scrape/europaticket", methods=["POST"])
 def scrape_europaticket_only():
@@ -624,15 +623,15 @@ def scrape_europaticket_only():
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/events/<int:event_id>")
 def get_event(event_id):
     try:
         event = Event.query.get_or_404(event_id)
-        return jsonify({"success": True, "event": event.to_dict()})
+        return success_response({"event": event.to_dict()})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/events/<int:event_id>", methods=["DELETE"])
 def delete_event(event_id):
@@ -640,10 +639,10 @@ def delete_event(event_id):
         event = Event.query.get_or_404(event_id)
         db.session.delete(event)
         db.session.commit()
-        return jsonify({"success": True, "message": "Event deleted"})
+        return success_response(message="Event deleted")
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 # External providers - fetch without persisting, return combined
 @bp.route("/events/fetch")
@@ -706,12 +705,12 @@ def hotels_search():
         limit = int(request.args.get("limit", "10") or 10)
 
         if not city:
-            return jsonify({"success": False, "error": "city is required"}), 400
+            return error_response("city is required", 400)
 
         items = search_hotels(city=city, check_in=check_in, check_out=check_out, guests=guests, limit=limit)
-        return jsonify({"success": True, "hotels": items})
+        return success_response({"hotels": items})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/hotels")
@@ -753,7 +752,7 @@ def get_hotels():
             }
         })
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/hotels/cities")
@@ -780,7 +779,7 @@ def get_hotel_cities():
             "cities": sorted(list(cities))
         })
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/hotels/<hotel_id>")
@@ -797,14 +796,11 @@ def get_hotel_details(hotel_id):
                 break
         
         if not hotel:
-            return jsonify({"success": False, "error": "Hotel not found"}), 404
+            return error_response("Hotel not found", 404)
         
-        return jsonify({
-            "success": True,
-            "hotel": hotel
-        })
+        return success_response({"hotel": hotel})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/hotels/popular")
@@ -843,7 +839,7 @@ def get_popular_hotels():
             "hotels": hotels[:limit]
         })
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 # Database CRUD operations for hotels
@@ -882,7 +878,7 @@ def get_hotels_from_db():
             }
         })
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/hotels/db/<int:hotel_id>", methods=["GET"])
@@ -895,7 +891,7 @@ def get_hotel_from_db(hotel_id):
             "hotel": hotel.to_dict()
         })
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/hotels/db", methods=["POST"])
@@ -915,7 +911,7 @@ def create_hotel():
         url = data.get("url", "").strip()
         
         if not name:
-            return jsonify({"success": False, "error": "Hotel name is required"}), 400
+            return error_response("Hotel name is required", 400)
         
         hotel = Hotel(
             name=name,
@@ -940,7 +936,7 @@ def create_hotel():
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/hotels/db/<int:hotel_id>", methods=["PUT"])
@@ -979,7 +975,7 @@ def update_hotel(hotel_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/hotels/db/<int:hotel_id>", methods=["DELETE"])
@@ -997,7 +993,7 @@ def delete_hotel(hotel_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/flights/search")
@@ -1012,12 +1008,12 @@ def flights_search():
         limit = int(request.args.get("limit", "10") or 10)
 
         if not origin or not destination or not departure_date:
-            return jsonify({"success": False, "error": "origin, destination, and departure_date are required"}), 400
+            return error_response("origin, destination, and departure_date are required", 400)
 
         items = search_flights(origin=origin, destination=destination, departure_date=departure_date, return_date=return_date, adults=adults, limit=limit)
-        return jsonify({"success": True, "flights": items})
+        return success_response({"flights": items})
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 # Favorites
@@ -1028,7 +1024,7 @@ def list_favorites():
     if email:
         q = q.filter(Favorite.user_email == email)
     items = [f.to_dict() for f in q.order_by(Favorite.created_at.desc()).limit(200).all()]
-    return jsonify({"success": True, "favorites": items})
+    return success_response({"favorites": items})
 
 
 @bp.route("/favorites", methods=["POST"]) 
@@ -1063,7 +1059,7 @@ def add_favorite():
 
         existing = existing_q.first()
         if existing:
-            return jsonify({"success": False, "error": "Favorite already exists for this user"}), 409
+            return error_response("Favorite already exists for this user", 409)
 
         fav = Favorite(
             user_email=user_email,
@@ -1088,10 +1084,10 @@ def add_favorite():
 
         db.session.add(fav)
         db.session.commit()
-        return jsonify({"success": True, "favorite": fav.to_dict()})
+        return success_response({"favorite": fav.to_dict()})
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/favorites/<int:fav_id>", methods=["DELETE"]) 
@@ -1100,10 +1096,10 @@ def delete_favorite(fav_id: int):
         fav = Favorite.query.get_or_404(fav_id)
         db.session.delete(fav)
         db.session.commit()
-        return jsonify({"success": True})
+        return success_response()
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 # ICS calendar export for a single event from DB
@@ -1137,7 +1133,7 @@ def export_event_ics(event_id: int):
             },
         )
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/events/filters")
 def get_filter_options():
@@ -1199,7 +1195,7 @@ def get_filter_options():
         })
         
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 # Event Sharing endpoints
 @bp.route("/events/share", methods=["POST"])
@@ -1217,10 +1213,10 @@ def share_event():
         platform = data.get("platform", "").lower()  # facebook, twitter, email, whatsapp, etc.
         
         if not event_title:
-            return jsonify({"success": False, "error": "Event title is required"}), 400
+            return error_response("Event title is required", 400)
         
         if not platform:
-            return jsonify({"success": False, "error": "Platform is required"}), 400
+            return error_response("Platform is required", 400)
         
         # Parse event date if provided
         parsed_date = None
@@ -1285,7 +1281,7 @@ def share_event():
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 # Event Reviews endpoints
 @bp.route("/events/reviews", methods=["GET"])
@@ -1319,7 +1315,7 @@ def get_event_reviews():
         })
         
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/events/reviews", methods=["POST"])
 @limiter.limit("5/minute")
@@ -1335,13 +1331,13 @@ def add_event_review():
         event_date = data.get("event_date")
         
         if not user_email:
-            return jsonify({"success": False, "error": "Email is required"}), 400
+            return error_response("Email is required", 400)
         
         if not event_title:
-            return jsonify({"success": False, "error": "Event title is required"}), 400
+            return error_response("Event title is required", 400)
         
         if not rating or not isinstance(rating, int) or rating < 1 or rating > 5:
-            return jsonify({"success": False, "error": "Rating must be between 1 and 5"}), 400
+            return error_response("Rating must be between 1 and 5", 400)
         
         # Parse event date if provided
         parsed_date = None
@@ -1392,7 +1388,7 @@ def add_event_review():
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 # Recommendations endpoints
 @bp.route("/events/recommendations")
@@ -1403,7 +1399,7 @@ def get_recommendations():
         limit = int(request.args.get("limit", 10))
         
         if not user_email:
-            return jsonify({"success": False, "error": "Email is required"}), 400
+            return error_response("Email is required", 400)
         
         recommendations = recommendation_service.get_personalized_recommendations(user_email, limit)
         
@@ -1414,7 +1410,7 @@ def get_recommendations():
         })
         
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/events/trending")
 def get_trending_events():
@@ -1431,7 +1427,7 @@ def get_trending_events():
         })
         
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 # LLM endpoints
 @bp.route("/llm/chat", methods=["POST"])
@@ -1445,7 +1441,7 @@ def llm_chat():
         conversation_history = data.get("history", [])
         
         if not message:
-            return jsonify({"success": False, "error": "Message is required"}), 400
+            return error_response("Message is required", 400)
         
         result = llm_service.chat(
             message=message,
@@ -1456,7 +1452,7 @@ def llm_chat():
         return jsonify(result)
         
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/llm/recommendations/enhanced", methods=["POST"])
 @limiter.limit("10/minute")
@@ -1469,10 +1465,10 @@ def get_enhanced_recommendations():
         limit = int(data.get("limit", 5))
         
         if not user_email:
-            return jsonify({"success": False, "error": "Email is required"}), 400
+            return error_response("Email is required", 400)
         
         if not events:
-            return jsonify({"success": False, "error": "Events list is required"}), 400
+            return error_response("Events list is required", 400)
         
         enhanced = llm_service.get_enhanced_recommendations(
             user_email=user_email,
@@ -1487,7 +1483,7 @@ def get_enhanced_recommendations():
         })
         
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/llm/itinerary/generate", methods=["POST"])
 @limiter.limit("5/minute")
@@ -1503,7 +1499,7 @@ def generate_itinerary():
         preferences = data.get("preferences", {})
         
         if not destination or not start_date or not end_date:
-            return jsonify({"success": False, "error": "Destination, start_date, and end_date are required"}), 400
+            return error_response("Destination, start_date, and end_date are required", 400)
         
         result = llm_service.generate_itinerary_suggestions(
             destination=destination,
@@ -1517,7 +1513,7 @@ def generate_itinerary():
         return jsonify(result)
         
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/llm/status")
 def llm_status():
@@ -1619,7 +1615,7 @@ def get_subscription_plans():
         })
         
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/subscription/status")
 def get_subscription_status():
@@ -1628,7 +1624,7 @@ def get_subscription_status():
         user_email = request.args.get("email", "").strip()
         
         if not user_email:
-            return jsonify({"success": False, "error": "Email is required"}), 400
+            return error_response("Email is required", 400)
         
         # Get user's subscription
         subscription = Subscription.query.filter_by(user_email=user_email, status='active').first()
@@ -1669,7 +1665,7 @@ def get_subscription_status():
         })
         
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/subscription/upgrade", methods=["POST"])
 def upgrade_subscription():
@@ -1680,10 +1676,10 @@ def upgrade_subscription():
         plan_type = data.get("plan_type", "").strip().lower()
         
         if not user_email:
-            return jsonify({"success": False, "error": "Email is required"}), 400
+            return error_response("Email is required", 400)
         
         if plan_type not in ["premium", "pro"]:
-            return jsonify({"success": False, "error": "Invalid plan type"}), 400
+            return error_response("Invalid plan type", 400)
         
         # Check if user already has an active subscription
         existing_sub = Subscription.query.filter_by(user_email=user_email, status='active').first()
@@ -1721,7 +1717,7 @@ def upgrade_subscription():
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 # Admin endpoints
@@ -1735,7 +1731,7 @@ def send_event_reminders():
             "message": f"Sent {sent_count} event reminders"
         }), 200
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/admin/send-digest", methods=["POST"])
 def send_daily_digest():
@@ -1747,7 +1743,7 @@ def send_daily_digest():
             "message": "Daily digest sent"
         }), 200
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 # Itinerary endpoints
@@ -1760,7 +1756,7 @@ def get_itineraries():
         limit = int(request.args.get("limit", 1000))  # Increased from 50 to 1000
         
         if not user_id:
-            return jsonify({"success": False, "error": "user_id is required"}), 400
+            return error_response("user_id is required", 400)
         
         query = Itinerary.query.filter_by(user_id=user_id)
         
@@ -1775,7 +1771,7 @@ def get_itineraries():
         })
         
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/itineraries", methods=["POST"])
@@ -1794,10 +1790,10 @@ def create_itinerary():
         budget = data.get("budget")
         
         if not user_id:
-            return jsonify({"success": False, "error": "user_id is required"}), 400
+            return error_response("user_id is required", 400)
         
         if not title:
-            return jsonify({"success": False, "error": "title is required"}), 400
+            return error_response("title is required", 400)
         
         # Parse dates
         parsed_start_date = None
@@ -1806,17 +1802,17 @@ def create_itinerary():
             try:
                 parsed_start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
             except ValueError:
-                return jsonify({"success": False, "error": "Invalid start_date format. Use YYYY-MM-DD"}), 400
+                return error_response("Invalid start_date format. Use YYYY-MM-DD", 400)
         
         if end_date:
             try:
                 parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
             except ValueError:
-                return jsonify({"success": False, "error": "Invalid end_date format. Use YYYY-MM-DD"}), 400
+                return error_response("Invalid end_date format. Use YYYY-MM-DD", 400)
         
         # Validate date range
         if parsed_start_date and parsed_end_date and parsed_start_date > parsed_end_date:
-            return jsonify({"success": False, "error": "start_date cannot be after end_date"}), 400
+            return error_response("start_date cannot be after end_date", 400)
         
         itinerary = Itinerary(
             user_id=user_id,
@@ -1839,7 +1835,7 @@ def create_itinerary():
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/itineraries/<int:itinerary_id>", methods=["GET"])
@@ -1853,7 +1849,7 @@ def get_itinerary(itinerary_id):
         })
         
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/itineraries/<int:itinerary_id>", methods=["PUT"])
@@ -1878,7 +1874,7 @@ def update_itinerary(itinerary_id):
                 try:
                     itinerary.start_date = datetime.strptime(data["start_date"], "%Y-%m-%d").date()
                 except ValueError:
-                    return jsonify({"success": False, "error": "Invalid start_date format. Use YYYY-MM-DD"}), 400
+                    return error_response("Invalid start_date format. Use YYYY-MM-DD", 400)
             else:
                 itinerary.start_date = None
         
@@ -1887,7 +1883,7 @@ def update_itinerary(itinerary_id):
                 try:
                     itinerary.end_date = datetime.strptime(data["end_date"], "%Y-%m-%d").date()
                 except ValueError:
-                    return jsonify({"success": False, "error": "Invalid end_date format. Use YYYY-MM-DD"}), 400
+                    return error_response("Invalid end_date format. Use YYYY-MM-DD", 400)
             else:
                 itinerary.end_date = None
         
@@ -1899,7 +1895,7 @@ def update_itinerary(itinerary_id):
         
         # Validate date range
         if itinerary.start_date and itinerary.end_date and itinerary.start_date > itinerary.end_date:
-            return jsonify({"success": False, "error": "start_date cannot be after end_date"}), 400
+            return error_response("start_date cannot be after end_date", 400)
         
         db.session.commit()
         
@@ -1911,7 +1907,7 @@ def update_itinerary(itinerary_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/itineraries/<int:itinerary_id>", methods=["DELETE"])
@@ -1929,7 +1925,7 @@ def delete_itinerary(itinerary_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/itineraries/<int:itinerary_id>/items", methods=["POST"])
@@ -1953,10 +1949,10 @@ def add_itinerary_item(itinerary_id):
         order_index = data.get("order_index", 0)
         
         if not item_type:
-            return jsonify({"success": False, "error": "item_type is required"}), 400
+            return error_response("item_type is required", 400)
         
         if not title:
-            return jsonify({"success": False, "error": "title is required"}), 400
+            return error_response("title is required", 400)
         
         # Parse date and time
         parsed_date = None
@@ -1966,13 +1962,13 @@ def add_itinerary_item(itinerary_id):
             try:
                 parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
             except ValueError:
-                return jsonify({"success": False, "error": "Invalid date format. Use YYYY-MM-DD"}), 400
+                return error_response("Invalid date format. Use YYYY-MM-DD", 400)
         
         if time:
             try:
                 parsed_time = datetime.strptime(time, "%H:%M").time()
             except ValueError:
-                return jsonify({"success": False, "error": "Invalid time format. Use HH:MM"}), 400
+                return error_response("Invalid time format. Use HH:MM", 400)
         
         item = ItineraryItem(
             itinerary_id=itinerary_id,
@@ -1999,7 +1995,7 @@ def add_itinerary_item(itinerary_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/itineraries/<int:itinerary_id>/items/<int:item_id>", methods=["PUT"])
@@ -2021,7 +2017,7 @@ def update_itinerary_item(itinerary_id, item_id):
                 try:
                     item.date = datetime.strptime(data["date"], "%Y-%m-%d").date()
                 except ValueError:
-                    return jsonify({"success": False, "error": "Invalid date format. Use YYYY-MM-DD"}), 400
+                    return error_response("Invalid date format. Use YYYY-MM-DD", 400)
             else:
                 item.date = None
         
@@ -2030,7 +2026,7 @@ def update_itinerary_item(itinerary_id, item_id):
                 try:
                     item.time = datetime.strptime(data["time"], "%H:%M").time()
                 except ValueError:
-                    return jsonify({"success": False, "error": "Invalid time format. Use HH:MM"}), 400
+                    return error_response("Invalid time format. Use HH:MM", 400)
             else:
                 item.time = None
         
@@ -2062,7 +2058,7 @@ def update_itinerary_item(itinerary_id, item_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/itineraries/<int:itinerary_id>/items/<int:item_id>", methods=["DELETE"])
@@ -2080,7 +2076,7 @@ def delete_itinerary_item(itinerary_id, item_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 
 @bp.route("/itineraries/<int:itinerary_id>/items/reorder", methods=["POST"])
@@ -2110,7 +2106,7 @@ def reorder_itinerary_items(itinerary_id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 # Elasticsearch management routes
 @bp.route("/elasticsearch/status")
 def elasticsearch_status():
@@ -2122,7 +2118,7 @@ def elasticsearch_status():
             "elasticsearch": stats
         })
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
 
 @bp.route("/elasticsearch/index", methods=["POST"])
 def index_all_events():
@@ -2174,4 +2170,4 @@ def index_all_events():
             "indexed_count": indexed_count
         })
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return error_response(str(e), 500)
