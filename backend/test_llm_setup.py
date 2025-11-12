@@ -48,7 +48,7 @@ try:
         messages=[{"role": "user", "content": "Say 'Hello'"}],
         max_tokens=5
     )
-    print(f"✓ API connection successful!")
+    print("✓ API connection successful!")
     print(f"  Response: {response.choices[0].message.content}")
     
 except Exception as e:

@@ -79,7 +79,7 @@ def main():
         
         # Show stats
         stats = es_service.get_index_stats()
-        print(f"\n📊 Index Statistics:")
+        print("\n📊 Index Statistics:")
         print(f"   Total events in index: {stats.get('total_events', 0)}")
         
         return 0

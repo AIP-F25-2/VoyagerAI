@@ -80,7 +80,6 @@ def _parse_toronto_hotel_entry(line, remaining, lines, i):
     
     rating_text, reviews_text, url = _scan_ahead_for_data(lines, i)
     location = _extract_location_from_remaining(remaining)
-    address = _extract_address_from_location(location)
     
     rating = _extract_rating_from_scored_text(rating_text)
     review_count = _extract_review_count(reviews_text)

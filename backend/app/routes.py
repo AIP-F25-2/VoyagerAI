@@ -1145,7 +1145,7 @@ def flights_search():
         if not origin or not destination or not departure_date:
             return error_response("origin, destination, and departure_date are required", 400)
 
-        items = search_flights(origin=origin, destination=destination, departure_date=departure_date, return_date=return_date, adults=adults, limit=limit)
+        items = search_flights(origin=origin, destination=destination, departure_date=departure_date, return_date=return_date, limit=limit)
         return success_response({"flights": items})
     except Exception as e:
         return error_response(str(e), 500)

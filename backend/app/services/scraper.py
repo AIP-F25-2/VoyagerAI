@@ -608,9 +608,9 @@ def build_eventbrite_range_url(months_ahead=6):
     return f"{EVENTBRITE_BASE}?start_date={start_date}&end_date={end_date}"
 
 
-def scrape_eventbrite_events(months_ahead=6, limit=50):
+def scrape_eventbrite_events(limit=50):
     """Generate sample Eventbrite events for testing (since web scraping is blocked)"""
-    print(f"⚠️  Eventbrite web scraping is blocked. Generating sample events...")
+    print("⚠️  Eventbrite web scraping is blocked. Generating sample events...")
     
     # Constants
     TORONTO_LOCATION = 'Toronto, ON'
@@ -832,9 +832,9 @@ def scrape_europaticket_month(year, month, limit=50):
     return results
 
 
-def scrape_europaticket_events(target_months=None, limit=50):
+def scrape_europaticket_events(limit=50):
     """Generate sample EuropaTicket events for testing (since web scraping is blocked)"""
-    print(f"⚠️  EuropaTicket web scraping is blocked. Generating sample events...")
+    print("⚠️  EuropaTicket web scraping is blocked. Generating sample events...")
     
     sample_events = [
         {
@@ -947,7 +947,7 @@ def scrape_all_events(city="Mumbai", bms_limit=10, eventbrite_limit=50, europati
         print(f"❌ BookMyShow scraping failed: {e}")
     
     # Eventbrite events
-    print(f"\n🎫 Scraping Eventbrite events...")
+    print("\n🎫 Scraping Eventbrite events...")
     try:
         eventbrite_events = _scrape_eventbrite_events_safe(eventbrite_limit)
         all_events.extend(eventbrite_events)
@@ -956,7 +956,7 @@ def scrape_all_events(city="Mumbai", bms_limit=10, eventbrite_limit=50, europati
         print(f"❌ Eventbrite scraping failed: {e}")
     
     # EuropaTicket events
-    print(f"\n🎪 Scraping EuropaTicket events...")
+    print("\n🎪 Scraping EuropaTicket events...")
     try:
         europaticket_events = _scrape_europaticket_events_safe(europaticket_limit)
         all_events.extend(europaticket_events)
