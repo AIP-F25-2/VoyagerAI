@@ -29,25 +29,47 @@ bp = Blueprint("api", __name__)
 ERROR_EMAIL_REQUIRED = "Email is required"
 
 
+def _get_tonight_dates(today):
+    """Get dates for tonight."""
+    return today.isoformat(), today.isoformat()
+
+
+def _get_weekend_dates(today):
+    """Get dates for this weekend."""
+    days_ahead = (4 - today.weekday()) % 7  # Friday index 4
+    start = today + timedelta(days=days_ahead)
+    end = start + timedelta(days=2)
+    return start.isoformat(), end.isoformat()
+
+
+def _get_week_dates(today):
+    """Get dates for this week."""
+    end = today + timedelta(days=7)
+    return today.isoformat(), end.isoformat()
+
+
+def _get_month_dates(today):
+    """Get dates for this month."""
+    end = today + timedelta(days=30)
+    return today.isoformat(), end.isoformat()
+
+
 def _parse_date_shortcuts(when):
     """Parse 'when' shortcuts into date_from and date_to."""
     if not when:
         return None, None
     
     today = date.today()
-    if when == "tonight":
-        return today.isoformat(), today.isoformat()
-    elif when == "weekend":
-        days_ahead = (4 - today.weekday()) % 7  # Friday index 4
-        start = today + timedelta(days=days_ahead)
-        end = start + timedelta(days=2)
-        return start.isoformat(), end.isoformat()
-    elif when == "this_week":
-        end = today + timedelta(days=7)
-        return today.isoformat(), end.isoformat()
-    elif when == "this_month":
-        end = today + timedelta(days=30)
-        return today.isoformat(), end.isoformat()
+    shortcuts = {
+        "tonight": _get_tonight_dates,
+        "weekend": _get_weekend_dates,
+        "this_week": _get_week_dates,
+        "this_month": _get_month_dates
+    }
+    
+    handler = shortcuts.get(when)
+    if handler:
+        return handler(today)
     return None, None
 
 
@@ -79,7 +101,10 @@ def _fetch_ticketmaster_events(query_param, city, limit):
             print(f"✅ Ticketmaster: Found {len(ticketmaster_events)} real events")
         else:
             print("⚠️ Ticketmaster: No events found")
+    except (ImportError, KeyError, AttributeError, TypeError) as e:
+        print(f"❌ Ticketmaster API Error: {e}")
     except Exception as e:
+        # Catch-all for network errors and other unexpected exceptions
         print(f"❌ Ticketmaster API Error: {e}")
 
     return ticketmaster_events
@@ -144,7 +169,10 @@ def _fetch_eventbrite_events(city, query_param, date_from, date_to, limit):
             eventbrite_events.append(formatted_event)
         
         print(f"✅ Eventbrite (DB): Found {len(eventbrite_events)} events")
+    except (AttributeError, TypeError, ValueError) as e:
+        print(f"❌ Eventbrite DB Error: {e}")
     except Exception as e:
+        # Catch-all for database errors and other unexpected exceptions
         print(f"❌ Eventbrite DB Error: {e}")
 
     return eventbrite_events
@@ -172,7 +200,10 @@ def _fetch_csv_events(query_param, city, limit):
         saved = _save_csv_events_to_db(csv_events)
         if saved:
             print(f"💾 Saved {saved} CSV events to database")
+    except (FileNotFoundError, KeyError, IndexError, AttributeError) as e:
+        print(f"❌ CSV Events Error: {e}")
     except Exception as e:
+        # Catch-all for file I/O errors and other unexpected exceptions
         print(f"❌ CSV Events Error: {e}")
 
     return csv_events
