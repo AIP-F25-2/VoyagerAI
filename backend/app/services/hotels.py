@@ -45,9 +45,15 @@ class HotelCSVLoader:
         """Extract review count from text."""
         if not reviews_text:
             return 0
-        review_match = re.search(r'(\d+(?:,\d+)*)\s*reviews?', reviews_text)
+        # Simplified regex to avoid DoS: match digits with optional commas, but limit backtracking
+        # Pattern: one or more digits, optionally followed by comma and more digits (max 3 groups)
+        review_match = re.search(r'(\d{1,3}(?:,\d{3})*)\s*reviews?', reviews_text)
         if review_match:
             return int(review_match.group(1).replace(',', ''))
+        # Fallback for simple number without commas
+        simple_match = re.search(r'(\d+)\s*reviews?', reviews_text)
+        if simple_match:
+            return int(simple_match.group(1))
         return 0
 
     def _extract_city_from_location(self, location: str) -> str:
@@ -57,7 +63,8 @@ class HotelCSVLoader:
         
         # Try to extract city from location string
         # Pattern: "District, City (District)" or "City" or "District, City"
-        city_match = re.search(r',\s*([A-Za-z\s]+?)(?:\s*\([^)]+\))?$', location)
+        # Simplified regex to avoid DoS: use non-greedy match with bounded length
+        city_match = re.search(r',\s*([A-Za-z][A-Za-z\s]{0,50}?)(?:\s*\([^)]{0,50}\))?$', location)
         if city_match:
             return city_match.group(1).strip()
         

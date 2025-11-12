@@ -47,7 +47,8 @@ def _extract_city_from_location(location):
     if not location:
         return "Unknown"
     
-    city_match = re.search(r',\s*([A-Za-z\s]+?)(?:\s*\([^)]+\))?$', location)
+    # Simplified regex to avoid DoS: use non-greedy match with bounded length
+    city_match = re.search(r',\s*([A-Za-z][A-Za-z\s]{0,50}?)(?:\s*\([^)]{0,50}\))?$', location)
     if city_match:
         return city_match.group(1).strip()
     

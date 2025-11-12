@@ -26,8 +26,10 @@ export default function AuthForm({ mode, onSubmit }: AuthFormProps) {
     e.preventDefault()
     setError(null)
     setSuccess(null)
-    // basic client-side validation
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // basic client-side validation - using more efficient regex to avoid DoS vulnerability
+    // Pattern avoids nested quantifiers that can cause catastrophic backtracking
+    const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+    if (!emailPattern.test(email)) {
       setError('Please enter a valid email address.')
       return
     }

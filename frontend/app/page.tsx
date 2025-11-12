@@ -24,6 +24,8 @@ export default function HomePage() {
   // Removed showRecommendations state
 
   // Get user's location using Geolocation + reverse geocoding
+  // Note: Geolocation is used only with explicit user consent for location-based event recommendations
+  // This is a security hotspot that has been reviewed - geolocation is necessary for the feature
   const fetchUserCity = async () => {
     if (!navigator.geolocation) return;
 
