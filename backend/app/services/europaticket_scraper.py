@@ -87,6 +87,104 @@ def extract_event_links_from_search_soup(soup):
     return sorted(links)
 
 
+def _extract_title(soup):
+    """Extract title from soup."""
+    title_tag = soup.find("h1")
+    if not title_tag:
+        title_tag = soup.find("h2")
+    if title_tag:
+        return title_tag.get_text(strip=True)
+    
+    og = soup.find("meta", {"property": "og:title"})
+    if og and og.get("content"):
+        return og["content"]
+    return None
+
+
+def _extract_description(soup):
+    """Extract description from soup."""
+    for cls in ("description", "event-description", "desc", "event__description"):
+        el = soup.find(class_=lambda c, cls_val=cls: c and cls_val in c)
+        if el:
+            return el.get_text(" ", strip=True)
+    
+    meta_desc = soup.find("meta", {"name": "description"})
+    if meta_desc and meta_desc.get("content"):
+        return meta_desc["content"]
+    return None
+
+
+def _extract_venue_and_city(soup):
+    """Extract venue and city from soup."""
+    venue = None
+    city = None
+    
+    # try anchor pattern
+    for a in soup.find_all("a", href=True):
+        if "/venue/" in a["href"]:
+            venue = a.get_text(strip=True)
+            parent = a.find_parent()
+            if parent:
+                parent_text = parent.get_text(" |,:\n", strip=True)
+                if parent_text and venue in parent_text:
+                    pieces = [p.strip() for p in parent_text.split(",") if p.strip()]
+                    if len(pieces) >= 2 and pieces[0] != venue:
+                        city = pieces[-1]
+            break
+    
+    # fallback: look for elements with 'venue' in class
+    if not venue:
+        for cls in ("venue", "event-venue", "place"):
+            el = soup.find(class_=lambda c, cls_val=cls: c and cls_val in c)
+            if el:
+                venue = el.get_text(" ", strip=True)
+                break
+    
+    return venue, city
+
+
+def _extract_date(soup):
+    """Extract date from soup."""
+    time_tag = soup.find("time")
+    if time_tag:
+        if time_tag.get("datetime"):
+            return time_tag["datetime"]
+        return time_tag.get_text(" ", strip=True)
+    
+    for cls in ("date", "event-date", "event__date"):
+        el = soup.find(class_=lambda c, cls_val=cls: c and cls_val in c)
+        if el:
+            return el.get_text(" ", strip=True)
+    return None
+
+
+def _extract_time(soup):
+    """Extract time from soup."""
+    for cls in ("time", "event-time", "event__time"):
+        el = soup.find(class_=lambda c, cls_val=cls: c and cls_val in c)
+        if el:
+            return el.get_text(" ", strip=True)
+    return None
+
+
+def _extract_price(soup):
+    """Extract price from soup."""
+    for cls in ("price", "event-price", "ticket-price"):
+        el = soup.find(class_=lambda c, cls_val=cls: c and cls_val in c)
+        if el:
+            return el.get_text(" ", strip=True)
+    
+    # fallback: look for currency symbols
+    text = soup.get_text(" ", strip=True)
+    for sym in ("€", "EUR", "£", "GBP", "$", "USD"):
+        if sym in text:
+            idx = text.find(sym)
+            start = max(0, idx - 30)
+            end = min(len(text), idx + 30)
+            return text[start:end].split("  ")[0].strip()
+    return None
+
+
 def parse_event_page(event_url):
     """
     Visit event page and extract title, date, time, price, venue, city, description.
@@ -94,108 +192,19 @@ def parse_event_page(event_url):
     """
     try:
         soup = get_soup(event_url)
-    except Exception as e:
+    except (ConnectionError, TimeoutError, AttributeError, ValueError) as e:
         print(f"[WARN] Failed to fetch event page {event_url}: {e}", file=sys.stderr)
         return {}
 
     data = {"url": event_url, "title": None, "date": None, "time": None,
             "price": None, "venue": None, "city": None, "description": None}
 
-    # Title - common patterns: <h1>, <h2>, meta property og:title
-    title_tag = soup.find("h1")
-    if not title_tag:
-        title_tag = soup.find("h2")
-    if title_tag:
-        data["title"] = title_tag.get_text(strip=True)
-    else:
-        og = soup.find("meta", {"property": "og:title"})
-        if og and og.get("content"):
-            data["title"] = og["content"]
-
-    # Description - try an element with class containing 'description' or <div id="content">
-    desc = None
-    for cls in ("description", "event-description", "desc", "event__description"):
-        el = soup.find(class_=lambda c: c and cls in c)
-        if el:
-            desc = el.get_text(" ", strip=True)
-            break
-    if not desc:
-        # fallback to meta description
-        meta_desc = soup.find("meta", {"name": "description"})
-        if meta_desc and meta_desc.get("content"):
-            desc = meta_desc["content"]
-    data["description"] = desc
-
-    # Venue and city - many pages include "Venue" labels or links to venues
-    # Look for <a> pointing to '/venue/' or text labeled 'Venue'
-    venue = None
-    city = None
-    # try anchor pattern
-    for a in soup.find_all("a", href=True):
-        if "/venue/" in a["href"]:
-            venue = a.get_text(strip=True)
-            # maybe the city is near the venue anchor - try parent text
-            parent = a.find_parent()
-            if parent:
-                parent_text = parent.get_text(" |,:\n", strip=True)
-                if parent_text and venue in parent_text:
-                    # attempt split heuristics
-                    pieces = [p.strip() for p in parent_text.split(",") if p.strip()]
-                    if len(pieces) >= 2 and pieces[0] != venue:
-                        city = pieces[-1]
-            break
-    # fallback: look for elements with 'venue' in class or label
-    if not venue:
-        for cls in ("venue", "event-venue", "place"):
-            el = soup.find(class_=lambda c: c and cls in c)
-            if el:
-                venue = el.get_text(" ", strip=True)
-                break
-    data["venue"] = venue
-    data["city"] = city
-
-    # Date/time/price: try common labels or time tag
-    # Date/time often in <time datetime="..."> or in elements with class 'date'/'time'
-    time_tag = soup.find("time")
-    if time_tag:
-        if time_tag.get("datetime"):
-            data["date"] = time_tag["datetime"]
-        else:
-            data["date"] = time_tag.get_text(" ", strip=True)
-    # look for classes that contain 'date' or 'time'
-    if not data["date"]:
-        for cls in ("date", "event-date", "event__date"):
-            el = soup.find(class_=lambda c: c and cls in c)
-            if el:
-                data["date"] = el.get_text(" ", strip=True)
-                break
-    if not data["time"]:
-        for cls in ("time", "event-time", "event__time"):
-            el = soup.find(class_=lambda c: c and cls in c)
-            if el:
-                data["time"] = el.get_text(" ", strip=True)
-                break
-
-    # Price - look for currency symbols or elements with 'price' in class
-    price = None
-    for cls in ("price", "event-price", "ticket-price"):
-        el = soup.find(class_=lambda c: c and cls in c)
-        if el:
-            price = el.get_text(" ", strip=True)
-            break
-    if not price:
-        # look for words like "Price" or currency symbols
-        text = soup.get_text(" ", strip=True)
-        # simple heuristic: find first occurrence of € or EUR or £ or $ or $
-        for sym in ("€", "EUR", "£", "GBP", "$", "USD"):
-            if sym in text:
-                # capture up to ~30 chars around the symbol
-                idx = text.find(sym)
-                start = max(0, idx - 30)
-                end = min(len(text), idx + 30)
-                price = text[start:end].split("  ")[0].strip()
-                break
-    data["price"] = price
+    data["title"] = _extract_title(soup)
+    data["description"] = _extract_description(soup)
+    data["venue"], data["city"] = _extract_venue_and_city(soup)
+    data["date"] = _extract_date(soup)
+    data["time"] = _extract_time(soup)
+    data["price"] = _extract_price(soup)
 
     return data
 

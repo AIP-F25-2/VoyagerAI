@@ -62,7 +62,7 @@ class ElasticsearchService:
             return False
         try:
             return self.client.ping()
-        except:
+        except (ConnectionError, TimeoutError, AttributeError):
             return False
     
     def create_index(self) -> bool:
