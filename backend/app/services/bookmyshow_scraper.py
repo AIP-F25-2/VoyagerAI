@@ -302,10 +302,12 @@ def scrape_bookmyshow_events(city="Mumbai", limit=100, headless=True):
         page = ctx.new_page()
 
         ok, err = retry_goto(page, home(city))
+        # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
         consent(page); time.sleep(0.3 + random.uniform(0.1, 0.4))
         if not ok: print("[warn] home nav failed:", err)
 
         ok, err = retry_goto(page, events(city))
+        # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
         consent(page); time.sleep(0.3 + random.uniform(0.1, 0.4))
         if not ok: print("[warn] events nav failed:", err)
 
@@ -316,6 +318,7 @@ def scrape_bookmyshow_events(city="Mumbai", limit=100, headless=True):
         for i, url in enumerate(links[: limit], 1):
             print(f"[{i}/{min(len(links), limit)}] {url}")
             ok, err = retry_goto(page, url, attempts=3, wait="domcontentloaded", timeout=60000)
+            # Security Hotspot Review: random.uniform() used for timing delays (non-cryptographic)
             consent(page); time.sleep(0.35 + random.uniform(0.05, 0.35))
             if not ok:
                 print("  -> skip (nav failed):", err)
