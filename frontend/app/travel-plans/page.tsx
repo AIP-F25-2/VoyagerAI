@@ -404,12 +404,20 @@ export default function ItinerariesPage() {
                           return (
                             <div 
                               key={index} 
+                              role="button"
+                              tabIndex={0}
                               className={`p-3 rounded-lg cursor-pointer transition-colors ${
                                 isSelected 
                                   ? 'bg-blue-600/50 border-2 border-blue-400' 
                                   : 'bg-gray-600/50 hover:bg-gray-500/50'
                               }`}
                               onClick={() => toggleEventSelection(event)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  toggleEventSelection(event);
+                                }
+                              }}
                             >
                               <div className="flex items-center justify-between mb-2">
                                 <h4 className="font-medium text-sm">{event.title}</h4>

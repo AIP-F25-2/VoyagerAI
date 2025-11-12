@@ -580,8 +580,8 @@ def month_date_range(year: int, month: int):
         end = date(year, 12, 31)
     else:
         # next month - 1 day
-        next_month_first = date(year + (1 if month == 12 else 0),
-                               (month % 12) + 1, 1)
+        # In the else block, month is 1-11, so next month is month + 1 (same year)
+        next_month_first = date(year, month + 1, 1)
         end = next_month_first - relativedelta(days=1)
     return start.strftime("%d-%m-%Y"), end.strftime("%d-%m-%Y")
 
