@@ -326,6 +326,19 @@ export default function ItineraryDetailPage() {
     return '📍'
   }
 
+  const getStatusBadgeClass = (status: string): string => {
+    if (status === 'draft') return 'bg-gray-500'
+    if (status === 'active') return 'bg-green-500'
+    if (status === 'completed') return 'bg-blue-500'
+    return 'bg-red-500'
+  }
+
+  const getDailyBudgetBarColor = (percentage: number): string => {
+    if (percentage >= 100) return 'bg-red-500'
+    if (percentage >= 80) return 'bg-yellow-500'
+    return 'bg-green-500'
+  }
+
   const generateAIItinerary = async (customHints?: string) => {
     if (!itinerary) return
     if (!itinerary.destination || !itinerary.start_date || !itinerary.end_date) {
@@ -694,12 +707,7 @@ export default function ItineraryDetailPage() {
             )}
           </div>
           <div className="text-right">
-            <div className={`inline-block px-3 py-1 rounded-full text-sm font-medium text-white ${
-              itinerary.status === 'draft' ? 'bg-gray-500' :
-              itinerary.status === 'active' ? 'bg-green-500' :
-              itinerary.status === 'completed' ? 'bg-blue-500' :
-              'bg-red-500'
-            }`}>
+            <div className={`inline-block px-3 py-1 rounded-full text-sm font-medium text-white ${getStatusBadgeClass(itinerary.status)}`}>
               {itinerary.status.charAt(0).toUpperCase() + itinerary.status.slice(1)}
             </div>
           </div>
@@ -1104,7 +1112,7 @@ export default function ItineraryDetailPage() {
                     const divisor = itineraryDaySpan || dailyBreakdown.length
                     const dailyBudget = itinerary?.budget ? itinerary.budget / Math.max(1, divisor) : 0
                     const pct = dailyBudget ? Math.min(100, (dayTotal / dailyBudget) * 100) : 0
-                    const barColor = pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-yellow-500' : 'bg-green-500'
+                    const barColor = getDailyBudgetBarColor(pct)
                     return (
                       <div key={day.date} className="border border-gray-700 rounded-lg p-4">
                         <div className="flex items-center justify-between mb-2">

@@ -30,6 +30,7 @@ start_backend() {
     python wsgi.py &
     BACKEND_PID=$!
     echo "✅ Backend started (PID: $BACKEND_PID)"
+    return 0
 }
 
 # Function to start frontend in background
@@ -47,6 +48,7 @@ start_frontend() {
     npm run dev &
     FRONTEND_PID=$!
     echo "✅ Frontend started (PID: $FRONTEND_PID)"
+    return 0
 }
 
 # Function to cleanup on exit
@@ -62,6 +64,7 @@ cleanup() {
         echo "✅ Frontend stopped"
     fi
     exit 0
+    return 0
 }
 
 # Set up signal handlers

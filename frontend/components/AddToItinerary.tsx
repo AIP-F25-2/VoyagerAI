@@ -66,7 +66,7 @@ export default function AddToItinerary({ itemType, itemData, onAdded }: AddToIti
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: parseInt(user.id),
+          user_id: Number.parseInt(user.id),
           title: newPlan.title.trim(),
           destination: newPlan.destination.trim() || undefined,
           status: 'draft',

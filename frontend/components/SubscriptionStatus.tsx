@@ -46,6 +46,24 @@ export default function SubscriptionStatus() {
     user = null;
   }
 
+  // Helper functions to extract nested ternaries
+  const formatPlanPrice = (price: number, currency: string): string => {
+    const currencyDisplay = currency === 'USD' ? 'mo' : currency
+    return `$${price}/${currencyDisplay}`
+  }
+
+  const getPlanButtonClass = (planId: string): string => {
+    if (planId === 'free') return 'bg-gray-600 hover:bg-gray-700'
+    if (planId === 'premium') return 'bg-blue-600 hover:bg-blue-700'
+    return 'bg-purple-600 hover:bg-purple-700'
+  }
+
+  const getPlanButtonText = (isUpgrading: boolean, planId: string): string => {
+    if (isUpgrading) return 'Processing...'
+    if (planId === 'free') return 'Downgrade'
+    return 'Upgrade'
+  }
+
   useEffect(() => {
     setIsClient(true);
   }, []);
@@ -224,13 +242,13 @@ export default function SubscriptionStatus() {
               <div className="text-center mb-4">
                 <h3 className="text-lg font-semibold text-white">{plan.name}</h3>
                 <div className="text-2xl font-bold text-white mt-2">
-                  {plan.price === 0 ? 'Free' : `$${plan.price}/${plan.currency === 'USD' ? 'mo' : plan.currency}`}
+                  {plan.price === 0 ? 'Free' : formatPlanPrice(plan.price, plan.currency)}
                 </div>
               </div>
 
               <div className="space-y-2 mb-4">
-                {plan.features.map((feature, index) => (
-                  <div key={index} className="flex items-center gap-2 text-sm text-gray-300">
+                {plan.features.map((feature) => (
+                  <div key={feature} className="flex items-center gap-2 text-sm text-gray-300">
                     <span className="text-green-400">✓</span>
                     {feature}
                   </div>
@@ -246,15 +264,9 @@ export default function SubscriptionStatus() {
                 <button
                   onClick={() => upgradeSubscription(plan.id)}
                   disabled={isUpgrading}
-                  className={`w-full py-2 px-4 rounded-lg font-semibold text-white transition-colors ${
-                    plan.id === 'free'
-                      ? 'bg-gray-600 hover:bg-gray-700'
-                      : plan.id === 'premium'
-                      ? 'bg-blue-600 hover:bg-blue-700'
-                      : 'bg-purple-600 hover:bg-purple-700'
-                  } disabled:opacity-50`}
+                  className={`w-full py-2 px-4 rounded-lg font-semibold text-white transition-colors ${getPlanButtonClass(plan.id)} disabled:opacity-50`}
                 >
-                  {isUpgrading ? 'Processing...' : plan.id === 'free' ? 'Downgrade' : 'Upgrade'}
+                  {getPlanButtonText(isUpgrading, plan.id)}
                 </button>
               )}
 

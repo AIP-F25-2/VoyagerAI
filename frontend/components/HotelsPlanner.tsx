@@ -108,7 +108,7 @@ export default function HotelsPlanner() {
         </label>
         <label className={styles.group}>
           <span>Guests</span>
-          <input className={styles.input} type="number" min={1} max={10} value={guests} onChange={(e) => setGuests(parseInt(e.target.value || "1"))} />
+          <input className={styles.input} type="number" min={1} max={10} value={guests} onChange={(e) => setGuests(Number.parseInt(e.target.value || "1"))} />
         </label>
       </div>
       

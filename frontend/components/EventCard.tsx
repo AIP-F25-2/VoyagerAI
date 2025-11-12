@@ -63,7 +63,7 @@ export default function EventCard({ event }: Props) {
           itemType="event"
           itemData={{
             title: event.title,
-            description: `${event.venue ? `Venue: ${event.venue}` : ''}${event.place ? `, Place: ${event.place}` : ''}`,
+            description: formatEventDescription(event.venue, event.place),
             date: event.date,
             time: event.time,
             location: event.venue || event.place,

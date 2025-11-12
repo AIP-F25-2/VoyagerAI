@@ -6,6 +6,7 @@ import { apiClient } from "@/lib/apiClient";
 import styles from "./AIChat.module.css";
 
 interface Message {
+  id?: string;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
@@ -44,6 +45,7 @@ export default function AIChat({ onClose, initialMessage }: AIChatProps) {
     if (!text || loading) return;
 
     const userMessage: Message = {
+      id: `user-${Date.now()}-${Math.random()}`,
       role: "user",
       content: text,
       timestamp: new Date(),
@@ -136,9 +138,9 @@ export default function AIChat({ onClose, initialMessage }: AIChatProps) {
             <p>👋 Hi! I'm your travel assistant. How can I help you today?</p>
             <div className={styles.quickQuestions}>
               <p>Try asking:</p>
-              {quickQuestions.map((q, idx) => (
+              {quickQuestions.map((q) => (
                 <button
-                  key={idx}
+                  key={q}
                   onClick={() => handleSend(q)}
                   className={styles.quickQuestionButton}
                   disabled={loading}
@@ -150,9 +152,9 @@ export default function AIChat({ onClose, initialMessage }: AIChatProps) {
           </div>
         )}
 
-        {messages.map((msg, idx) => (
+        {messages.map((msg) => (
           <div
-            key={idx}
+            key={msg.id || `${msg.role}-${msg.timestamp.getTime()}-${Math.random()}`}
             className={`${styles.message} ${
               msg.role === "user" ? styles.userMessage : styles.assistantMessage
             }`}

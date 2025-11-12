@@ -365,8 +365,8 @@ export default function ItinerariesPage() {
                 <div className="bg-gray-700/50 p-4 rounded-lg">
                   <h3 className="text-lg font-semibold mb-3">Selected Events ({selectedEvents.length})</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {selectedEvents.map((event, index) => (
-                      <div key={index} className="bg-gray-600/50 p-3 rounded-lg flex justify-between items-center">
+                    {selectedEvents.map((event) => (
+                      <div key={event.id || event.title || event.url || `selected-${event.date}`} className="bg-gray-600/50 p-3 rounded-lg flex justify-between items-center">
                         <div>
                           <h4 className="font-medium">{event.title}</h4>
                           {event.venue && <p className="text-sm text-gray-300">📍 {event.venue}</p>}
@@ -460,8 +460,8 @@ export default function ItinerariesPage() {
               <p className="text-gray-400 text-center py-4">No saved events yet. Go to the main page and save some events!</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {savedEvents.map((event, index) => (
-                  <div key={index} className="bg-gray-700/50 p-4 rounded-lg">
+                {savedEvents.map((event) => (
+                  <div key={event.id || event.title || event.url || `saved-${event.date}`} className="bg-gray-700/50 p-4 rounded-lg">
                     <h3 className="font-semibold mb-2">{event.title}</h3>
                     {event.venue && <p className="text-sm text-gray-300 mb-2">📍 {event.venue}</p>}
                     {event.date && <p className="text-sm text-gray-300 mb-2">📅 {event.date}</p>}
@@ -472,7 +472,7 @@ export default function ItinerariesPage() {
                           // Add event to a travel plan
                           const travelPlanId = prompt('Enter travel plan ID to add this event to:')
                           if (travelPlanId) {
-                            addEventToTravelPlan(parseInt(travelPlanId), event)
+                            addEventToTravelPlan(Number.parseInt(travelPlanId), event)
                           }
                         }}
                         className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm"

@@ -14,6 +14,13 @@ export default function FlightsPlanner() {
   const [results, setResults] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const formatFlightDescription = (airline: string | null, flightNumber: string | null): string => {
+    const parts: string[] = []
+    if (airline) parts.push(`Airline: ${airline}`)
+    if (flightNumber) parts.push(`Flight: ${flightNumber}`)
+    return parts.join(', ')
+  }
+
   const onSearch = () => {
     setLoading(true);
     setError(null);
@@ -85,7 +92,7 @@ export default function FlightsPlanner() {
             min={1} 
             max={9} 
             value={adults} 
-            onChange={(e) => setAdults(parseInt(e.target.value || "1"))} 
+            onChange={(e) => setAdults(Number.parseInt(e.target.value || "1"))} 
           />
         </label>
       </div>
@@ -120,7 +127,7 @@ export default function FlightsPlanner() {
                   itemType="flight"
                   itemData={{
                     title: `${flight.origin} → ${flight.destination}`,
-                    description: `${flight.airline ? `Airline: ${flight.airline}` : ''}${flight.flight_number ? `, Flight: ${flight.flight_number}` : ''}`,
+                    description: formatFlightDescription(flight.airline, flight.flight_number),
                     date: flight.departure_date,
                     location: `${flight.origin} to ${flight.destination}`,
                     price: flight.price ? Number.parseFloat(flight.price.replace(/[^0-9.-]+/g, '')) : undefined,
