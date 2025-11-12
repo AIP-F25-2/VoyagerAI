@@ -71,6 +71,7 @@ export default function AIChat({ onClose, initialMessage }: AIChatProps) {
 
       if (data.success) {
         const assistantMessage: Message = {
+          id: `assistant-${Date.now()}-${Math.random()}`,
           role: "assistant",
           content: data.message,
           timestamp: new Date(),
@@ -79,6 +80,7 @@ export default function AIChat({ onClose, initialMessage }: AIChatProps) {
       } else {
         setError(data.error || "Failed to get response");
         const errorMessage: Message = {
+          id: `error-${Date.now()}-${Math.random()}`,
           role: "assistant",
           content: `Sorry, I encountered an error: ${data.error || "Unknown error"}. Please make sure OPENAI_API_KEY is configured.`,
           timestamp: new Date(),
@@ -89,6 +91,7 @@ export default function AIChat({ onClose, initialMessage }: AIChatProps) {
       const errorMsg = err instanceof Error ? err.message : "Network error";
       setError(errorMsg);
       const errorMessage: Message = {
+        id: `error-${Date.now()}-${Math.random()}`,
         role: "assistant",
         content: `Sorry, I couldn't connect to the AI service. ${errorMsg}`,
         timestamp: new Date(),
