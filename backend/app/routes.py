@@ -21,6 +21,7 @@ from .services.elasticsearch_service import es_service
 from datetime import datetime, date, timedelta
 from io import StringIO
 import os
+import hashlib
 
 bp = Blueprint("api", __name__)
 
@@ -66,7 +67,9 @@ def _fetch_ticketmaster_events(query_param, city, limit):
             raw_events = ticketmaster_data['_embedded']['events']
             for i, event in enumerate(raw_events):
                 if 'id' not in event or not event['id']:
-                    event['id'] = f"tm_{i}_{hash(event.get('name', ''))}"
+                    # Use SHA256 for ID generation (non-cryptographic use, just for uniqueness)
+                    name_hash = hashlib.sha256(event.get('name', '').encode()).hexdigest()[:8]
+                    event['id'] = f"tm_{i}_{name_hash}"
                 if 'source' not in event:
                     event['source'] = 'ticketmaster'
             ticketmaster_events = raw_events
@@ -102,8 +105,10 @@ def _fetch_eventbrite_events(city, query_param, date_from, date_to, limit):
         events = db_query.order_by(Event.created_at.desc()).limit(limit).all()
         
         for i, event in enumerate(events):
+            # Use SHA256 for ID generation (non-cryptographic use, just for uniqueness)
+            title_hash = hashlib.sha256(event.title.encode()).hexdigest()[:8]
             formatted_event = {
-                "id": f"eb_{event.id if hasattr(event, 'id') else i}_{hash(event.title)}",
+                "id": f"eb_{event.id if hasattr(event, 'id') else i}_{title_hash}",
                 "name": event.title,
                 "url": event.url,
                 "dates": {
@@ -365,6 +370,7 @@ def home():
     return {"message": "VoyagerAI Backend Running"}
 
 @bp.route("/events")
+@limiter.limit("60/minute")  # Rate limit to prevent DoS
 def get_events():
     """Get events from real APIs and database, format for frontend."""
     try:
@@ -446,6 +452,7 @@ def get_events():
         return error_response(str(e), 500)
 
 @bp.route("/scrape", methods=["POST"])
+@limiter.limit("5/minute")  # Rate limit scraping to prevent DoS
 def scrape_events():
     """Scrape events from BookMyShow and save to SQL database."""
     try:
@@ -486,6 +493,7 @@ def scrape_events():
         return error_response(str(e), 500)
 
 @bp.route("/scrape/all", methods=["POST"])
+@limiter.limit("3/minute")  # Rate limit heavy scraping to prevent DoS
 def scrape_all_sources():
     """Scrape events from all sources (BookMyShow, Eventbrite, EuropaTicket) and save to database."""
     try:
@@ -540,6 +548,7 @@ def scrape_all_sources():
         return error_response(str(e), 500)
 
 @bp.route("/scrape/eventbrite", methods=["POST"])
+@limiter.limit("5/minute")  # Rate limit to prevent DoS
 def scrape_eventbrite_only():
     """Scrape events from Eventbrite only."""
     try:
@@ -586,6 +595,7 @@ def scrape_eventbrite_only():
         return error_response(str(e), 500)
 
 @bp.route("/scrape/europaticket", methods=["POST"])
+@limiter.limit("5/minute")  # Rate limit to prevent DoS
 def scrape_europaticket_only():
     """Scrape events from EuropaTicket only."""
     try:
@@ -646,6 +656,7 @@ def delete_event(event_id):
 
 # External providers - fetch without persisting, return combined
 @bp.route("/events/fetch")
+@limiter.limit("30/minute")  # Rate limit to prevent DoS
 def fetch_provider_events():
     """Fetch events from external APIs (Ticketmaster & Eventbrite) without saving to database."""
     query = request.args.get("q", "").strip()
@@ -695,6 +706,7 @@ def fetch_provider_events():
 
 
 @bp.route("/hotels/search")
+@limiter.limit("60/minute")  # Rate limit to prevent DoS
 def hotels_search():
     """Search hotels via provider stub (extendable with real API)."""
     try:
@@ -714,6 +726,7 @@ def hotels_search():
 
 
 @bp.route("/hotels")
+@limiter.limit("60/minute")  # Rate limit to prevent DoS
 def get_hotels():
     """Get hotels with optional filtering"""
     try:
@@ -997,6 +1010,7 @@ def delete_hotel(hotel_id):
 
 
 @bp.route("/flights/search")
+@limiter.limit("30/minute")  # Rate limit to prevent DoS
 def flights_search():
     """Search flights via provider stub (extendable with real API)."""
     try:

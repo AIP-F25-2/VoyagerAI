@@ -44,8 +44,13 @@ def validate_email(email):
 
 def validate_password(password):
     """Validate password strength"""
-    if len(password) < 6:
-        return False, "Password must be at least 6 characters long"
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+    # Check for at least one letter and one number
+    has_letter = any(c.isalpha() for c in password)
+    has_number = any(c.isdigit() for c in password)
+    if not (has_letter and has_number):
+        return False, "Password must contain at least one letter and one number"
     return True, "Valid password"
 
 @auth_bp.route("/signup", methods=["POST"])
