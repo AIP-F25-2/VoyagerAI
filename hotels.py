@@ -1,61 +1,78 @@
 import requests
 import csv
+import time
 
 # --- CONFIG ---
-url = "https://booking-com15.p.rapidapi.com/api/v1/hotels/searchHotels"   # Correct endpoint
-
-querystring = {
-    "dest_id": "-1746441",  # Berlin city id
-    "search_type": "CITY",
-    "arrival_date": "2025-10-16",
-    "departure_date": "2025-10-20",
-    "adults": "1",
-    "children_age": "",
-    "room_qty": "1",
-    "page_number": "1",
-    "units": "metric",
-    "locale": "en-us",
-    "currency_code": "EUR",
-    "sort_by": "popularity"
-}
+url = "https://booking-com15.p.rapidapi.com/api/v1/hotels/searchDestination"
 
 headers = {
     "x-rapidapi-key": "3d70da5d02mshe6f3e5b0ce2006cp14cf26jsn21e17c2df56d",
     "x-rapidapi-host": "booking-com15.p.rapidapi.com"
 }
 
-# --- MAKE REQUEST ---
-response = requests.get(url, headers=headers, params=querystring)
+base_query = {
+    "checkout_date": "2025-10-20",
+    "units": "metric",
+    "dest_type": "city",
+    "dest_id": "-1746441",   # Berlin
+    "adults_number": "1",
+    "checkin_date": "2025-10-16",
+    "order_by": "popularity",
+    "locale": "en-us",
+    "filter_by_currency": "EUR",
+    "include_adjacency": "true"
+}
 
-if response.status_code == 200:
+# CSV SETUP
+csv_file = "berlin_hotels_full.csv"
+with open(csv_file, mode='w', newline='', encoding='utf-8') as file:
+    writer = csv.writer(file)
+    writer.writerow([
+        "Hotel Name", "Address", "Price (EUR)", "Review Score", 
+        "Review Count", "Star Rating", "Latitude", "Longitude"
+    ])
+
+# FETCH MULTIPLE PAGES
+page = 0
+total_saved = 0
+
+while True:
+    print(f"Fetching page {page}...")
+
+    query = base_query.copy()
+    query["page_number"] = str(page)
+
+    response = requests.get(url, headers=headers, params=query)
+
+    if response.status_code != 200:
+        print(f"Error: {response.status_code} -> {response.text}")
+        break
+
     data = response.json()
+    hotels = data.get("result", [])
 
-    hotels = data.get("data", {}).get("hotels", [])  # Correct path
+    if not hotels:
+        print("No more hotels found. Stopping.")
+        break
 
-    if hotels:
-        csv_file = "berlin_hotels.csv"
+    # Append hotels to CSV
+    with open(csv_file, mode='a', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
 
-        with open(csv_file, "w", newline="", encoding="utf-8") as file:
-            writer = csv.writer(file)
+        for h in hotels:
+            writer.writerow([
+                h.get("hotel_name", "N/A"),
+                h.get("address", "N/A"),
+                h.get("price_breakdown", {}).get("all_inclusive_price", "N/A"),
+                h.get("review_score", "N/A"),
+                h.get("review_nr", "N/A"),
+                h.get("class", "N/A"),  # star rating
+                h.get("location", {}).get("latitude", "N/A"),
+                h.get("location", {}).get("longitude", "N/A")
+            ])
+            total_saved += 1
 
-            # Header
-            writer.writerow(["Hotel Name", "Address", "Price (EUR)", "Review Score"])
+    page += 1
+    time.sleep(1)  # avoid rate limits
 
-            # Extract data
-            for hotel in hotels:
-                name = hotel.get("hotel_name", "N/A")
-                address = hotel.get("address", "N/A")
-
-                price_info = hotel.get("price_breakdown", {})
-                price = price_info.get("all_inclusive_price", "N/A")
-
-                review = hotel.get("review_score", "N/A")
-
-                writer.writerow([name, address, price, review])
-
-        print(f"Successfully saved {len(hotels)} hotels to {csv_file}")
-
-    else:
-        print("No hotels found or response changed.")
-else:
-    print(f"Error: {response.status_code}, {response.text}")
+print(f"\n✅ Completed! Saved total {total_saved} hotel records to {csv_file}")
