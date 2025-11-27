@@ -1,23 +1,24 @@
-# Use the official Python image from Docker Hub
-FROM python:3.11-slim
+FROM node:20-alpine AS builder
 
-# Set the working directory inside the container
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y libpq-dev build-essential
+ENV NEXT_DISABLE_ESLINT_PLUGIN=1
 
-# Copy the requirements.txt file into the container
-COPY requirements.txt .
+COPY package.json package-lock.json ./
+RUN npm ci
 
-# Install the Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the Python scripts into the container
 COPY . .
+RUN npm run build
 
-# Expose any necessary ports (if the scripts run a server)
-EXPOSE 8000
 
-# Command to run the script (adjust based on how you want to run the files)
-CMD ["python", "hotel_scrapper.py"]
+# Runtime stage
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY --from=builder /app ./
+
+EXPOSE 3000
+
+CMD ["npm", "start"]
