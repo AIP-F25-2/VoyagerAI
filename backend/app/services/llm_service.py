@@ -236,9 +236,50 @@ Only return the JSON array, no other text."""
         today = datetime.now().date()
         message_lower = message.lower()
         
+        # Check for specific dates mentioned (e.g., "November 28-29", "28-29 November")
+        import re
+        # Pattern to match dates like "November 28-29", "28-29 November", "Nov 28-29"
+        date_patterns = [
+            r'(november|nov|december|dec|january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|october|oct)\s+(\d{1,2})[-–](\d{1,2})',
+            r'(\d{1,2})[-–](\d{1,2})\s+(november|nov|december|dec|january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|october|oct)',
+        ]
+        
+        month_map = {
+            'january': 1, 'jan': 1, 'february': 2, 'feb': 2, 'march': 3, 'mar': 3,
+            'april': 4, 'apr': 4, 'may': 5, 'june': 6, 'jun': 6, 'july': 7, 'jul': 7,
+            'august': 8, 'aug': 8, 'september': 9, 'sep': 9, 'october': 10, 'oct': 10,
+            'november': 11, 'nov': 11, 'december': 12, 'dec': 12
+        }
+        
+        for pattern in date_patterns:
+            match = re.search(pattern, message_lower, re.IGNORECASE)
+            if match:
+                groups = match.groups()
+                if len(groups) == 3:
+                    if groups[0].lower() in month_map:
+                        month = month_map[groups[0].lower()]
+                        day1 = int(groups[1])
+                        day2 = int(groups[2])
+                    else:
+                        day1 = int(groups[0])
+                        day2 = int(groups[1])
+                        month = month_map[groups[2].lower()]
+                    
+                    current_year = today.year
+                    # If the month is in the past relative to current month, use next year
+                    if month < today.month:
+                        current_year += 1
+                    
+                    date1 = datetime(current_year, month, day1).date()
+                    date2 = datetime(current_year, month, day2).date()
+                    return date1, date2
+        
+        # Default behavior for relative dates
         if "weekend" in message_lower or "this weekend" in message_lower:
+            # Find the next Saturday
             days_until_saturday = (5 - today.weekday()) % 7
-            if days_until_saturday == 0 and today.weekday() < 5:
+            if days_until_saturday == 0:
+                # If today is Saturday, use next Saturday
                 days_until_saturday = 7
             saturday = today + timedelta(days=days_until_saturday)
             sunday = saturday + timedelta(days=1)
@@ -293,9 +334,27 @@ Only return the JSON array, no other text."""
             messages.append({"role": "system", "content": context_msg})
         
         if events_data:
-            events_context = f"""Here are real events from our database that match the user's query:
+            # Format events with proper date display
+            from datetime import datetime
+            formatted_events = []
+            for event in events_data[:15]:
+                event_copy = event.copy()
+                if event.get("date"):
+                    try:
+                        # Parse and format date nicely
+                        event_date = datetime.fromisoformat(event["date"].replace("Z", "+00:00"))
+                        event_copy["date"] = event_date.strftime("%B %d, %Y")
+                    except:
+                        pass
+                formatted_events.append(event_copy)
+            
+            # Get current date context
+            today = datetime.now().strftime("%B %d, %Y")
+            events_context = f"""Today's date is {today}. Here are real events from our database that match the user's query:
 
-{json.dumps(events_data[:15], indent=2)}
+{json.dumps(formatted_events, indent=2)}
+
+IMPORTANT: Use the exact dates from the events data above. Do not make up dates or use incorrect months.
 
 Use this information to give specific, helpful recommendations. Mention event names, dates, venues, and cities when relevant."""
             messages.append({"role": "system", "content": events_context})

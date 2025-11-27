@@ -190,6 +190,57 @@ class EmailService:
         """
         
         return self._send_email(user_email, subject, html_content, text_content)
+    
+    def send_collaboration_invite_email(self, invitee_email: str, inviter_name: str, 
+                                        itinerary_title: str, role: str, share_url: str = None) -> bool:
+        """Send collaboration invitation email"""
+        subject = f"You've been invited to collaborate on: {itinerary_title}"
+        
+        role_display = {
+            "owner": "Owner (full access)",
+            "editor": "Editor (can add/edit items)",
+            "viewer": "Viewer (read-only)"
+        }.get(role, role)
+        
+        html_content = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #2563eb;">Travel Plan Collaboration Invitation</h2>
+            <p>Hi there,</p>
+            <p><strong>{inviter_name}</strong> has invited you to collaborate on a travel plan!</p>
+            <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="margin-top: 0; color: #1f2937;">{itinerary_title}</h3>
+                <p><strong>Your Role:</strong> {role_display}</p>
+            </div>
+            {f'<p style="text-align: center;"><a href="{share_url}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">View Travel Plan</a></p>' if share_url else ''}
+            <p>You can accept or decline this invitation when you log in to VoyagerAI.</p>
+            <p>Happy planning!</p>
+            <p>Best regards,<br>The VoyagerAI Team</p>
+        </body>
+        </html>
+        """
+        
+        text_content = f"""
+        Travel Plan Collaboration Invitation
+        
+        Hi there,
+        
+        {inviter_name} has invited you to collaborate on a travel plan!
+        
+        Travel Plan: {itinerary_title}
+        Your Role: {role_display}
+        
+        {f'View the plan: {share_url}' if share_url else ''}
+        
+        You can accept or decline this invitation when you log in to VoyagerAI.
+        
+        Happy planning!
+        
+        Best regards,
+        The VoyagerAI Team
+        """
+        
+        return self._send_email(invitee_email, subject, html_content, text_content)
 
 # Global email service instance
 email_service = EmailService()

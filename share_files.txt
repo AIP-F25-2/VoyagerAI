@@ -1,0 +1,22 @@
+# Files to share with friends for collaboration
+
+## Essential Modified Files:
+backend/app/models.py
+backend/app/routes.py
+backend/app/services/email_service.py
+backend/app/services/llm_service.py
+frontend/app/globals.css
+frontend/app/hotels/page.tsx
+frontend/app/page.tsx
+frontend/app/travel-plans/[id]/page.tsx
+frontend/app/travel-plans/page.tsx
+frontend/components/EventCard.tsx
+frontend/package.json
+
+## New Component Files:
+frontend/components/EnhancedEventReviews.tsx
+frontend/components/GroupItinerary.tsx
+
+## Optional (if migrations needed):
+backend/MIGRATION_INSTRUCTIONS.md
+backend/complete_migration.sql

@@ -301,6 +301,8 @@ class Itinerary(db.Model):
     end_date = db.Column(db.Date, nullable=True)
     budget = db.Column(db.Float, nullable=True)
     status = db.Column(db.String(50), default='draft')  # draft, active, completed, cancelled
+    is_shared = db.Column(db.Boolean, default=False)  # Whether itinerary is shared for collaboration
+    share_token = db.Column(db.String(100), nullable=True, unique=True)  # Unique token for sharing
     created_at = db.Column(db.DateTime, default=utcnow)
     updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
     
@@ -309,6 +311,9 @@ class Itinerary(db.Model):
     
     # Relationship with itinerary items
     items = db.relationship('ItineraryItem', backref='itinerary', lazy=True, cascade='all, delete-orphan')
+    
+    # Relationship with collaborators
+    collaborators = db.relationship('ItineraryCollaborator', backref='itinerary', lazy=True, cascade='all, delete-orphan')
     
     def to_dict(self):
         return {
@@ -321,9 +326,12 @@ class Itinerary(db.Model):
             "end_date": self.end_date.isoformat() if self.end_date else None,
             "budget": self.budget,
             "status": self.status,
+            "is_shared": self.is_shared,
+            "share_token": self.share_token,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
-            "items": [item.to_dict() for item in self.items] if self.items else []
+            "items": [item.to_dict() for item in self.items] if self.items else [],
+            "collaborators": [collab.to_dict() for collab in self.collaborators] if self.collaborators else []
         }
 
 
@@ -359,6 +367,45 @@ class ItineraryItem(db.Model):
             "image_url": self.image_url,
             "status": self.status,
             "order_index": self.order_index,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat()
+        }
+
+
+class ItineraryCollaborator(db.Model):
+    """Model for group planning - users who can collaborate on an itinerary"""
+    id = db.Column(db.Integer, primary_key=True)
+    itinerary_id = db.Column(db.Integer, db.ForeignKey('itinerary.id'), nullable=False)
+    user_email = db.Column(db.String(200), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # Optional, can invite by email
+    role = db.Column(db.String(50), default='viewer')  # owner, editor, viewer
+    status = db.Column(db.String(50), default='pending')  # pending, accepted, declined
+    invited_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    invited_at = db.Column(db.DateTime, default=utcnow)
+    joined_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=utcnow)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
+    
+    # Relationships
+    user = db.relationship('User', foreign_keys=[user_id], backref=db.backref('collaborated_itineraries', lazy=True))
+    inviter = db.relationship('User', foreign_keys=[invited_by])
+    
+    # Enforce one collaboration per user per itinerary
+    __table_args__ = (
+        db.UniqueConstraint('itinerary_id', 'user_email', name='uq_collaborator_itinerary_email'),
+    )
+    
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "itinerary_id": self.itinerary_id,
+            "user_email": self.user_email,
+            "user_id": self.user_id,
+            "role": self.role,
+            "status": self.status,
+            "invited_by": self.invited_by,
+            "invited_at": self.invited_at.isoformat(),
+            "joined_at": self.joined_at.isoformat() if self.joined_at else None,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat()
         }

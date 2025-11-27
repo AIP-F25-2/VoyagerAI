@@ -89,42 +89,42 @@ export default function HotelsPage() {
         <HotelsPlanner />
 
         {/* Popular Hotels Section */}
-        {popularHotels.length > 0 && (
-          <section className="mt-12">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                ⭐ Popular Hotels
-              </h2>
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                Highest rated hotels
-              </span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {popularHotels.map((hotel) => (
-                <HotelCard key={hotel.id} hotel={hotel} />
-              ))}
-            </div>
-          </section>
-        )}
+            {popularHotels.length > 0 && (
+              <section className="mt-12">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    ⭐ Popular Hotels
+                  </h2>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    Highest rated hotels
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {popularHotels.map((hotel) => (
+                    <HotelCard key={hotel.id} hotel={hotel} />
+                  ))}
+                </div>
+              </section>
+            )}
 
-        {/* All Hotels Section */}
-        {allHotels.length > 0 && (
-          <section className="mt-12">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                🏨 All Hotels
-              </h2>
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                {allHotels.length} hotels available
-              </span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {allHotels.map((hotel) => (
-                <HotelCard key={hotel.id} hotel={hotel} />
-              ))}
-            </div>
-          </section>
-        )}
+            {/* All Hotels Section */}
+            {allHotels.length > 0 && (
+              <section className="mt-12">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    🏨 All Hotels
+                  </h2>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    {allHotels.length} hotels available
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {allHotels.map((hotel) => (
+                    <HotelCard key={hotel.id} hotel={hotel} />
+                  ))}
+                </div>
+              </section>
+            )}
 
         {/* Cities Section */}
         {cities.length > 0 && (

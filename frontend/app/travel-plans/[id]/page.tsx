@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useRouter, useParams } from 'next/navigation'
 import { apiClient } from '@/lib/apiClient'
 import Link from 'next/link'
+import GroupItinerary from '@/components/GroupItinerary'
 
 interface Itinerary {
   id: number
@@ -58,6 +59,7 @@ export default function ItineraryDetailPage() {
   const [generatingAI, setGeneratingAI] = useState(false)
   const [showAIGenerateModal, setShowAIGenerateModal] = useState(false)
   const [aiHints, setAiHints] = useState('')
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [newItem, setNewItem] = useState({
     item_type: 'activity',
     title: '',
@@ -339,6 +341,45 @@ export default function ItineraryDetailPage() {
     return 'bg-green-500'
   }
 
+  // Helper function to normalize date to YYYY-MM-DD format
+  const normalizeDate = (dateStr: string): string => {
+    if (!dateStr) return ''
+    try {
+      // If already in YYYY-MM-DD format, return as is
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        return dateStr
+      }
+      // Try to parse and reformat
+      const date = new Date(dateStr)
+      if (isNaN(date.getTime())) return ''
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    } catch {
+      return ''
+    }
+  }
+
+  // Helper function to normalize time to HH:MM format (24-hour)
+  const normalizeTime = (timeStr: string): string => {
+    if (!timeStr) return ''
+    try {
+      // If already in HH:MM format, return as is
+      if (/^\d{2}:\d{2}$/.test(timeStr)) {
+        return timeStr
+      }
+      // Try to parse various time formats
+      const time = new Date(`2000-01-01T${timeStr}`)
+      if (isNaN(time.getTime())) return ''
+      const hours = String(time.getHours()).padStart(2, '0')
+      const minutes = String(time.getMinutes()).padStart(2, '0')
+      return `${hours}:${minutes}`
+    } catch {
+      return ''
+    }
+  }
+
   const generateAIItinerary = async (customHints?: string) => {
     if (!itinerary) return
     if (!itinerary.destination || !itinerary.start_date || !itinerary.end_date) {
@@ -407,12 +448,29 @@ export default function ItineraryDetailPage() {
         return
       }
 
+      console.log('🤖 AI Generated Plan:', JSON.stringify(plan, null, 2))
+      console.log(`📅 Total days in plan: ${plan.length}`)
+
       // Create a map of event titles to event data for matching
       const eventMap = new Map()
       uniqueEvents.forEach(ev => {
         const title = ev.name || ev.title || 'Untitled Event'
-        eventMap.set(title.toLowerCase(), ev)
+        const titleLower = title.toLowerCase().trim()
+        // Store by exact title
+        eventMap.set(titleLower, ev)
       })
+      
+      console.log(`📊 Event map created with ${eventMap.size} events`)
+      console.log('Sample events in map:', Array.from(eventMap.keys()).slice(0, 5))
+      
+      // Count total events suggested by AI
+      let totalEventsSuggested = 0
+      plan.forEach(day => {
+        if (Array.isArray(day.events)) {
+          totalEventsSuggested += day.events.length
+        }
+      })
+      console.log(`🎯 Total events suggested by AI: ${totalEventsSuggested}`)
 
       // Create a map of hotel names to hotel data
       const hotelMap = new Map()
@@ -424,79 +482,261 @@ export default function ItineraryDetailPage() {
       // 4) Persist generated items
       let addedCount = 0
       const addedHotels = new Set() // Track hotels to avoid duplicates
+      const addedEvents = new Set() // Track successfully added events
+      const dayHotelMap = new Map() // Track which hotel is assigned to which day
 
+      // First pass: Add hotels and events, track what was successfully added
+      let firstHotelAdded = null
+      
+      // Validate itinerary date range
+      const itineraryStart = normalizeDate(itinerary.start_date)
+      const itineraryEnd = normalizeDate(itinerary.end_date)
+      console.log(`📅 Itinerary date range: ${itineraryStart} to ${itineraryEnd}`)
+      
       for (const day of plan) {
-        const dayDate = day.date || ''
+        const rawDayDate = day.date || ''
+        const dayDate = normalizeDate(rawDayDate) || rawDayDate // Normalize day date
+        
+        // Validate that the day's date is within the itinerary range
+        if (dayDate && itineraryStart && itineraryEnd) {
+          if (dayDate < itineraryStart || dayDate > itineraryEnd) {
+            console.warn(`⚠️ Day date ${dayDate} is outside itinerary range (${itineraryStart} - ${itineraryEnd}), skipping`)
+            continue
+          }
+        }
+        
+        console.log(`📆 Processing Day ${day.day || '?'}: ${dayDate}`)
         const hotelTitle = day.hotel || ''
         
-        // Add hotel (only once per unique hotel)
-        if (hotelTitle && !addedHotels.has(hotelTitle.toLowerCase())) {
-          const hotelData = hotelMap.get(hotelTitle.toLowerCase()) || {}
-          const hotelUrl = hotelData.url || ''
-          const hotelAddress = hotelData.address || hotelData.location || ''
-          const hotelPrice = hotelData.price_per_night ? 
-            Number.parseFloat(String(hotelData.price_per_night).replace(/[^0-9.-]/g, '')) : null
+        // Note: Hotels will be added at the end of each day after processing all events
+        // This ensures hotels appear at the end of the day's timeline
+        if (hotelTitle) {
+          const hotelKey = hotelTitle.toLowerCase()
+          const hotelData = hotelMap.get(hotelKey) || {}
+          
+          // Store hotel info for this day to add later at end of day
+          if (!dayHotelMap.has(dayDate)) {
+            dayHotelMap.set(dayDate, JSON.stringify({
+              title: hotelTitle,
+              data: hotelData
+            }))
+            if (!firstHotelAdded) {
+              firstHotelAdded = { title: hotelTitle, data: hotelData, date: dayDate }
+            }
+          }
+        } else if (firstHotelAdded && !dayHotelMap.has(dayDate)) {
+          // Store first hotel for this day if no hotel was suggested
+          dayHotelMap.set(dayDate, JSON.stringify({
+            title: firstHotelAdded.title,
+            data: firstHotelAdded.data
+          }))
+        }
 
+        // Add events and track which ones were successfully added
+        if (Array.isArray(day.events) && day.events.length > 0) {
+          console.log(`📅 Day ${day.day || dayDate} has ${day.events.length} events suggested:`, day.events)
+          for (const evTitle of day.events) {
+            const title = typeof evTitle === 'string' ? evTitle : (evTitle?.title || evTitle?.name || '')
+            if (!title || title.trim().length === 0) {
+              console.warn('⚠️ Skipping empty event title:', evTitle)
+              continue
+            }
+            
+            const titleLower = title.toLowerCase().trim()
+            console.log(`🔍 Looking for event: "${title}" (normalized: "${titleLower}")`)
+            
+            // Try exact match first
+            let eventData = eventMap.get(titleLower)
+            console.log(`   Exact match: ${eventData ? '✅ Found' : '❌ Not found'}`)
+            
+            // If no exact match, try fuzzy matching (check if title contains any event name or vice versa)
+            if (!eventData || !eventData.id) {
+              for (const [mapTitle, mapEvent] of eventMap.entries()) {
+                if (mapTitle.length > 5 && (titleLower.includes(mapTitle) || mapTitle.includes(titleLower))) {
+                  console.log(`   Fuzzy match found: "${mapTitle}" matches "${titleLower}"`)
+                  eventData = mapEvent
+                  break
+                }
+              }
+            }
+            
+            // If we found event data, use it; otherwise create event from AI suggestion
+            // Check if eventData is a real event object (has name, title, or id)
+            const hasEventData = eventData && (eventData.id || eventData.name || eventData.title || eventData.url)
+            
+            if (hasEventData) {
+              // Event found in database - use its data BUT use the itinerary day's date
+              // Always use dayDate from the itinerary, not the event's original date
+              // This ensures events are scheduled on the correct day in the itinerary
+              const eventDate = normalizeDate(dayDate) || ''
+              const rawEventTime = eventData.dates?.start?.localTime || eventData.time || ''
+              const eventTime = normalizeTime(rawEventTime)
+              const eventVenue = eventData._embedded?.venues?.[0]?.name || eventData.venue || 'TBA'
+              const eventUrl = eventData.url || ''
+              const eventPrice = eventData.priceRanges?.[0]?.min || eventData.price || null
+
+              // Validate required fields
+              if (!eventDate) {
+                console.warn(`⚠️ Skipping event "${title}" - no valid date found for day ${day.day || dayDate}`)
+                continue
+              }
+              
+              console.log(`   📅 Using itinerary date: ${eventDate} (not event's original date)`)
+
+              try {
+                const payload = {
+                  item_type: 'event',
+                  title: eventData.name || eventData.title || title,
+                  description: eventVenue,
+                  date: eventDate,
+                  time: eventTime || null, // Use null instead of empty string
+                  location: eventVenue,
+                  price: eventPrice,
+                  url: eventUrl || null,
+                  image_url: null,
+                  status: 'planned',
+                  order_index: addedCount++
+                }
+                
+                console.log(`📤 Sending event payload:`, payload)
+                
+                const response = await apiClient.post(`/api/itineraries/${itineraryId}/items`, payload)
+                addedEvents.add(titleLower)
+                console.log(`✅ Added event from database: "${title}" → "${eventData.name || eventData.title || title}" on ${eventDate}`)
+              } catch (e: any) {
+                console.error(`❌ Failed to add event "${title}":`, e.message || e)
+                console.error('   Error response:', e.response?.data || e)
+                console.error('   Payload was:', {
+                  item_type: 'event',
+                  title: eventData.name || eventData.title || title,
+                  date: eventDate,
+                  time: eventTime || null
+                })
+              }
+            } else {
+              // Event not found in database, but AI suggested it - add it anyway with AI title
+              // This handles cases where AI knows about events we don't have in our DB
+              if (!dayDate) {
+                console.warn(`⚠️ Skipping AI-suggested event "${title}" - no valid date for day`)
+                continue
+              }
+
+              try {
+                const payload = {
+                  item_type: 'event',
+                  title: title,
+                  description: 'Event suggested by AI',
+                  date: dayDate,
+                  time: null,
+                  location: null,
+                  price: null,
+                  url: null,
+                  image_url: null,
+                  status: 'planned',
+                  order_index: addedCount++
+                }
+                
+                console.log(`📤 Sending AI-suggested event payload:`, payload)
+                
+                const response = await apiClient.post(`/api/itineraries/${itineraryId}/items`, payload)
+                addedEvents.add(titleLower)
+                console.log(`✅ Added AI-suggested event (not in DB): "${title}" on ${dayDate}`)
+              } catch (e: any) {
+                console.error(`❌ Failed to add AI-suggested event "${title}":`, e.message || e)
+                console.error('   Error response:', e.response?.data || e)
+              }
+            }
+          }
+        } else {
+          console.log(`📅 Day ${day.day || dayDate} has no events (day.events:`, day.events, ')')
+        }
+        
+        // Add hotel at the end of the day (after all events)
+        const hotelInfoStr = dayHotelMap.get(dayDate)
+        if (hotelInfoStr) {
           try {
+            const hotelInfo = JSON.parse(hotelInfoStr)
+            const hotelData = hotelInfo.data || {}
+            const hotelTitle = hotelInfo.title || ''
+            const hotelUrl = hotelData.url || ''
+            const hotelAddress = hotelData.address || hotelData.location || ''
+            const hotelPrice = hotelData.price_per_night ? 
+              Number.parseFloat(String(hotelData.price_per_night).replace(/[^0-9.-]/g, '')) : null
+
+            // Add hotel at end of day (9:00 PM - 21:00)
             await apiClient.post(`/api/itineraries/${itineraryId}/items`, {
               item_type: 'hotel',
               title: hotelTitle,
-              description: hotelAddress,
+              description: hotelAddress || 'Nearby hotel for the night',
               date: dayDate,
-              time: '15:00',
+              time: '21:00', // 9:00 PM - end of day
               location: hotelAddress,
               price: hotelPrice,
               url: hotelUrl,
-              image_url: '',
+              image_url: null,
               status: 'planned',
               order_index: addedCount++
             })
-            addedHotels.add(hotelTitle.toLowerCase())
+            console.log(`🏨 Added hotel at end of day: "${hotelTitle}" on ${dayDate} at 21:00`)
           } catch (e) {
-            console.error('Failed to add hotel:', e)
+            console.error(`❌ Failed to add hotel for day ${dayDate}:`, e)
           }
         }
+      }
 
-        // Add events
-        if (Array.isArray(day.events)) {
-          for (const evTitle of day.events) {
-            const title = typeof evTitle === 'string' ? evTitle : (evTitle?.title || '')
-            const eventData = eventMap.get(title.toLowerCase()) || {}
+      // Second pass: Add tips, but filter out references to events that weren't added
+      for (const day of plan) {
+        const rawDayDate = day.date || ''
+        const dayDate = normalizeDate(rawDayDate) || rawDayDate
+        
+        if (day.tips) {
+          let tipsText = Array.isArray(day.tips) ? day.tips.join('\n') : String(day.tips)
+          
+          // Filter tips: Remove references to events that weren't actually added
+          if (Array.isArray(day.events) && day.events.length > 0) {
+            const mentionedEvents = day.events
+              .map(ev => typeof ev === 'string' ? ev : (ev?.title || ''))
+              .filter(ev => ev && !addedEvents.has(ev.toLowerCase()))
             
-            const eventDate = eventData.dates?.start?.localDate || eventData.date || dayDate
-            const eventTime = eventData.dates?.start?.localTime || eventData.time || ''
-            const eventVenue = eventData._embedded?.venues?.[0]?.name || eventData.venue || 'TBA'
-            const eventUrl = eventData.url || ''
-            const eventPrice = eventData.priceRanges?.[0]?.min || eventData.price || null
-
-            try {
-              await apiClient.post(`/api/itineraries/${itineraryId}/items`, {
-                item_type: 'event',
-                title,
-                description: eventVenue,
-                date: eventDate,
-                time: eventTime,
-                location: eventVenue,
-                price: eventPrice,
-                url: eventUrl,
-                image_url: '',
-                status: 'planned',
-                order_index: addedCount++
+            // If tips mention events that weren't added, clean up the tips
+            if (mentionedEvents.length > 0) {
+              // Remove sentences that mention events that weren't added
+              const sentences = tipsText.split(/[.!?]\s+/)
+              const cleanedSentences = sentences.filter(sentence => {
+                const lowerSentence = sentence.toLowerCase()
+                // Check if sentence mentions an event that wasn't added
+                const mentionsRemovedEvent = mentionedEvents.some(eventTitle => 
+                  lowerSentence.includes(eventTitle.toLowerCase())
+                )
+                // Also check for generic event references if no events were added
+                if (addedEvents.size === 0 && (
+                  lowerSentence.includes('concert') || 
+                  lowerSentence.includes('event') || 
+                  lowerSentence.includes('venue') ||
+                  lowerSentence.includes('show')
+                )) {
+                  return false
+                }
+                return !mentionsRemovedEvent
               })
-            } catch (e) {
-              console.error('Failed to add event:', e)
+              
+              tipsText = cleanedSentences.join('. ').trim()
+              
+              // If all tips were removed, create a generic tip instead
+              if (!tipsText || tipsText.length < 10) {
+                tipsText = `Enjoy your day in ${itinerary.destination}. Explore local attractions and dining options.`
+              }
             }
           }
-        }
-
-        // Add tips as notes
-        if (day.tips) {
-          try {
-            await apiClient.post(`/api/itineraries/${itineraryId}/items`, {
-              item_type: 'note',
-              title: `Tips for Day ${day.day || ''}`.trim(),
-              description: Array.isArray(day.tips) ? day.tips.join('\n') : String(day.tips),
-              date: dayDate,
+          
+          // Only add tips if they have meaningful content
+          if (tipsText && tipsText.length > 10) {
+            try {
+              await apiClient.post(`/api/itineraries/${itineraryId}/items`, {
+                item_type: 'note',
+                title: `Tips for Day ${day.day || ''}`.trim(),
+                description: tipsText,
+                date: dayDate,
                 time: '',
                 location: '',
                 price: null,
@@ -505,14 +745,66 @@ export default function ItineraryDetailPage() {
                 status: 'planned',
                 order_index: addedCount++
               })
+            } catch (e) {
+              console.error('Failed to add tips:', e)
+            }
+          }
+        }
+      }
+
+      // Ensure first day has a hotel if hotels are available but none was added
+      if (hotels.length > 0 && plan.length > 0) {
+        const firstDay = plan[0]
+        const rawFirstDayDate = firstDay.date || itinerary.start_date
+        const firstDayDate = normalizeDate(rawFirstDayDate) || rawFirstDayDate
+        
+        // Check if first day already has a hotel
+        const firstDayHasHotel = dayHotelMap.has(firstDayDate)
+        
+        if (!firstDayHasHotel) {
+          // Use the first available hotel as fallback
+          const fallbackHotel = hotels[0]
+          try {
+            await apiClient.post(`/api/itineraries/${itineraryId}/items`, {
+              item_type: 'hotel',
+              title: fallbackHotel.name,
+              description: fallbackHotel.address || fallbackHotel.location || 'Nearby hotel for the night',
+              date: firstDayDate,
+              time: '21:00', // 9:00 PM - end of day
+              location: fallbackHotel.address || fallbackHotel.location || '',
+              price: fallbackHotel.price_per_night ? 
+                Number.parseFloat(String(fallbackHotel.price_per_night).replace(/[^0-9.-]/g, '')) : null,
+              url: fallbackHotel.url || null,
+              image_url: null,
+              status: 'planned',
+              order_index: addedCount++
+            })
+            dayHotelMap.set(firstDayDate, JSON.stringify({
+              title: fallbackHotel.name,
+              data: fallbackHotel
+            }))
+            console.log(`🏨 Added fallback hotel at end of first day: "${fallbackHotel.name}" on ${firstDayDate} at 21:00`)
           } catch (e) {
-            console.error('Failed to add tips:', e)
+            console.error('Failed to add fallback hotel:', e)
           }
         }
       }
 
       await fetchItinerary()
-      alert('AI itinerary generated and added to your plan!')
+      
+      // Summary
+      console.log('\n📊 ITINERARY GENERATION SUMMARY:')
+      console.log(`   ✅ Events added: ${addedEvents.size}`)
+      console.log(`   ✅ Hotels added: ${dayHotelMap.size} days`)
+      console.log(`   ✅ Total items added: ${addedCount}`)
+      console.log(`   📅 Days processed: ${plan.length}`)
+      
+      const summaryMessage = `AI itinerary generated!\n\n` +
+        `✅ ${addedEvents.size} event(s) added\n` +
+        `✅ ${dayHotelMap.size} day(s) with hotels\n` +
+        `✅ ${addedCount} total items added`
+      
+      alert(summaryMessage)
     } catch (e: any) {
       console.error('AI generation failed:', e)
       alert(e?.message || 'Failed to generate itinerary')
@@ -740,6 +1032,16 @@ export default function ItineraryDetailPage() {
             </div>
           )}
         </div>
+
+        {/* Group Planning Section */}
+        {isAuthenticated && user && (
+          <div className="mb-8">
+            <GroupItinerary
+              itineraryId={Number.parseInt(itineraryId)}
+              onUpdate={fetchItinerary}
+            />
+          </div>
+        )}
 
         {/* Budget Management Section */}
         {itinerary.budget && (
@@ -1105,7 +1407,12 @@ export default function ItineraryDetailPage() {
             {/* Per-day budget breakdown */}
             {dailyBreakdown.length > 0 && (
               <div className="bg-gray-800/50 p-6 rounded-lg">
-                <h3 className="text-xl font-bold mb-4">Per-day Budget</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold">Per-day Budget</h3>
+                  <p className="text-sm text-gray-400">
+                    Click on any day to see detailed schedule
+                  </p>
+                </div>
                 <div className="space-y-4">
                   {dailyBreakdown.map((day) => {
                     const dayTotal = day.total
@@ -1113,92 +1420,166 @@ export default function ItineraryDetailPage() {
                     const dailyBudget = itinerary?.budget ? itinerary.budget / Math.max(1, divisor) : 0
                     const pct = dailyBudget ? Math.min(100, (dayTotal / dailyBudget) * 100) : 0
                     const barColor = getDailyBudgetBarColor(pct)
+                    // Sort items by time for this day
+                    const sortedDayItems = [...day.items].sort((a, b) => {
+                      if (!a.time && !b.time) return 0
+                      if (!a.time) return 1
+                      if (!b.time) return -1
+                      return a.time.localeCompare(b.time)
+                    })
                     return (
-                      <div key={day.date} className="border border-gray-700 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="font-semibold">{day.date === 'No date' ? 'No date' : new Date(day.date).toLocaleDateString()}</div>
-                          <div className="text-sm text-gray-300">
-                            ${dayTotal.toLocaleString()} {dailyBudget ? `of $${dailyBudget.toFixed(2)}` : ''}
+                      <button
+                        key={day.date}
+                        onClick={() => setSelectedDay(day.date)}
+                        className="w-full text-left border border-gray-700 rounded-xl p-5 hover:border-blue-500/50 hover:bg-gradient-to-br hover:from-gray-700/40 hover:to-gray-800/60 transition-all duration-200 cursor-pointer group shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-600/20 flex items-center justify-center text-white font-bold border border-blue-500/30 group-hover:scale-110 transition-transform">
+                              {day.date === 'No date' ? '?' : new Date(day.date).getDate()}
+                            </div>
+                            <div>
+                              <div className="font-bold text-lg text-white group-hover:text-blue-300 transition-colors">
+                                {day.date === 'No date' ? 'No date' : new Date(day.date).toLocaleDateString('en-US', { 
+                                  weekday: 'long', 
+                                  month: 'short', 
+                                  day: 'numeric' 
+                                })}
+                              </div>
+                              <div className="text-xs text-gray-400">
+                                {day.date !== 'No date' && new Date(day.date).toLocaleDateString('en-US', { year: 'numeric' })}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-semibold text-green-400">
+                              ${dayTotal.toLocaleString()}
+                            </div>
+                            {dailyBudget > 0 && (
+                              <div className="text-xs text-gray-400">
+                                of ${dailyBudget.toFixed(2)}
+                              </div>
+                            )}
                           </div>
                         </div>
                         {dailyBudget > 0 && (
-                          <div className="h-2 bg-gray-700 rounded">
-                            <div className={`h-2 ${barColor} rounded`} style={{ width: `${pct}%` }} />
+                          <div className="h-2.5 bg-gray-700/50 rounded-full mb-4 overflow-hidden shadow-inner">
+                            <div className={`h-2.5 ${barColor} rounded-full transition-all duration-500 shadow-sm`} style={{ width: `${pct}%` }} />
                           </div>
                         )}
-                        {/* Items list for the day */}
-                        <div className="mt-3 space-y-2">
-                          {day.items.map((i) => (
-                            <div key={i.id} className="text-sm text-gray-300 flex justify-between">
-                              <span>
-                                <span className="mr-2">{getItemTypeIcon(i.item_type)}</span>
-                                {i.title}
-                              </span>
+                        {/* Items preview for the day */}
+                        <div className="space-y-2.5">
+                          <div className="flex items-center gap-2 text-xs text-gray-400 mb-3">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                            <span>{sortedDayItems.length} {sortedDayItems.length === 1 ? 'item' : 'items'} scheduled</span>
+                            <span className="text-blue-400 group-hover:translate-x-1 transition-transform inline-block">→</span>
+                          </div>
+                          {sortedDayItems.slice(0, 3).map((i) => (
+                            <div key={i.id} className="flex items-center justify-between text-sm bg-gray-800/30 rounded-lg p-2.5 group-hover:bg-gray-800/50 transition-colors">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <span className="text-base flex-shrink-0">{getItemTypeIcon(i.item_type)}</span>
+                                <span className="text-gray-300 truncate font-medium">{i.title}</span>
+                                {i.time && (
+                                  <span className="text-xs text-gray-500 flex-shrink-0 ml-2 px-2 py-0.5 bg-gray-700/50 rounded">
+                                    {formatTime(i.time)}
+                                  </span>
+                                )}
+                              </div>
                               {i.price ? (
-                                <span className="text-green-400">${i.price.toLocaleString()}</span>
+                                <span className="text-green-400 font-semibold ml-2 flex-shrink-0">${i.price.toLocaleString()}</span>
                               ) : (
-                                <span className="text-gray-500">—</span>
+                                <span className="text-gray-500 ml-2 flex-shrink-0">—</span>
                               )}
                             </div>
                           ))}
+                          {sortedDayItems.length > 3 && (
+                            <div className="text-xs text-blue-400 mt-3 font-medium flex items-center gap-1">
+                              <span>+{sortedDayItems.length - 3} more items</span>
+                              <span className="group-hover:translate-x-1 transition-transform">→</span>
+                            </div>
+                          )}
                         </div>
-                      </div>
+                      </button>
                     )
                   })}
                 </div>
               </div>
             )}
 
-            {sortedItems.map((item, index) => (
-              <div key={item.id} className="bg-gray-800/50 p-6 rounded-lg">
-                <div className="flex justify-between items-start">
-                  <div className="flex items-start gap-4">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-xl ${getItemTypeColor(item.item_type)}`}>
-                      {getItemTypeIcon(item.item_type)}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-xl font-bold">{item.title}</h3>
-                        <span className="text-sm text-gray-400 capitalize">{item.item_type}</span>
+            {/* Only show items that aren't in any day breakdown (shouldn't happen, but safety check) */}
+            {(() => {
+              // Get all items that are already shown in day breakdown (including "No date" group)
+              const itemsInDayBreakdown = new Set(
+                dailyBreakdown.flatMap(day => day.items.map(item => item.id))
+              )
+              
+              // Filter out items that are already shown in day breakdown
+              const ungroupedItems = sortedItems.filter(item => !itemsInDayBreakdown.has(item.id))
+              
+              // Only show this section if there are truly ungrouped items (shouldn't normally happen)
+              if (ungroupedItems.length === 0) return null
+              
+              return (
+                <div className="mt-8">
+                  <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                    <span>📋</span>
+                    <span>Ungrouped Items</span>
+                  </h3>
+                  <div className="space-y-4">
+                    {ungroupedItems.map((item, index) => (
+                      <div key={item.id} className="bg-gray-800/50 p-6 rounded-lg">
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-start gap-4">
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-xl ${getItemTypeColor(item.item_type)}`}>
+                              {getItemTypeIcon(item.item_type)}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-2">
+                                <h3 className="text-xl font-bold">{item.title}</h3>
+                                <span className="text-sm text-gray-400 capitalize">{item.item_type}</span>
+                              </div>
+                              {item.description && (
+                                <p className="text-gray-300 mb-3">{item.description}</p>
+                              )}
+                              <div className="flex flex-wrap gap-4 text-sm text-gray-400">
+                                {item.date && (
+                                  <span>📅 {formatDate(item.date)}</span>
+                                )}
+                                {item.time && (
+                                  <span>🕐 {formatTime(item.time)}</span>
+                                )}
+                                {item.location && (
+                                  <span>📍 {item.location}</span>
+                                )}
+                                {item.price && (
+                                  <span>💰 ${item.price.toLocaleString()}</span>
+                                )}
+                              </div>
+                              {item.url && (
+                                <a
+                                  href={item.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block"
+                                >
+                                  View Details →
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteItem(item.id)}
+                            className="text-red-400 hover:text-red-300 text-sm"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
-                      {item.description && (
-                        <p className="text-gray-300 mb-3">{item.description}</p>
-                      )}
-                      <div className="flex flex-wrap gap-4 text-sm text-gray-400">
-                        {item.date && (
-                          <span>📅 {formatDate(item.date)}</span>
-                        )}
-                        {item.time && (
-                          <span>🕐 {formatTime(item.time)}</span>
-                        )}
-                        {item.location && (
-                          <span>📍 {item.location}</span>
-                        )}
-                        {item.price && (
-                          <span>💰 ${item.price.toLocaleString()}</span>
-                        )}
-                      </div>
-                      {item.url && (
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-400 hover:text-blue-300 text-sm mt-2 inline-block"
-                        >
-                          View Details →
-                        </a>
-                      )}
-                    </div>
+                    ))}
                   </div>
-                  <button
-                    onClick={() => handleDeleteItem(item.id)}
-                    className="text-red-400 hover:text-red-300 text-sm"
-                  >
-                    Delete
-                  </button>
                 </div>
-              </div>
-            ))}
+              )
+            })()}
           </div>
         )}
 
@@ -1386,6 +1767,387 @@ export default function ItineraryDetailPage() {
             </div>
           </div>
         )}
+
+        {/* Day Detail Modal - Enhanced Timeline View */}
+        {selectedDay && (() => {
+          const dayData = dailyBreakdown.find(d => d.date === selectedDay)
+          if (!dayData) return null
+          
+          // Sort items by time (items without time go to the end)
+          const sortedDayItems = [...dayData.items].sort((a, b) => {
+            if (!a.time && !b.time) return a.order_index - b.order_index
+            if (!a.time) return 1
+            if (!b.time) return -1
+            return a.time.localeCompare(b.time)
+          })
+          
+          // Separate items with and without times
+          const itemsWithTime = sortedDayItems.filter(item => item.time)
+          const itemsWithoutTime = sortedDayItems.filter(item => !item.time)
+          
+          const divisor = itineraryDaySpan || dailyBreakdown.length
+          const dailyBudget = itinerary?.budget ? itinerary.budget / Math.max(1, divisor) : 0
+          const pct = dailyBudget ? Math.min(100, (dayData.total / dailyBudget) * 100) : 0
+          const barColor = getDailyBudgetBarColor(pct)
+          
+          // Calculate time range for the day - handle same time case
+          const getUniqueTimes = () => {
+            const times = itemsWithTime.map(item => item.time).filter((time, index, self) => self.indexOf(time) === index)
+            return times
+          }
+          
+          const uniqueTimes = getUniqueTimes()
+          const timeRange = uniqueTimes.length > 0 ? {
+            start: uniqueTimes[0],
+            end: uniqueTimes[uniqueTimes.length - 1],
+            isSameTime: uniqueTimes.length === 1
+          } : null
+          
+          // Group items by time for better organization
+          const itemsByTime = itemsWithTime.reduce((acc, item) => {
+            const time = item.time
+            if (!acc[time]) acc[time] = []
+            acc[time].push(item)
+            return acc
+          }, {} as Record<string, typeof itemsWithTime>)
+          
+          return (
+            <div 
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity duration-200"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setSelectedDay(null)
+              }}
+            >
+              <div className="bg-gradient-to-br from-gray-800 via-gray-800 to-gray-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-hidden border border-gray-700/50 transform transition-all duration-300 scale-100">
+                {/* Header with gradient */}
+                <div className="bg-gradient-to-r from-blue-600/20 via-purple-600/20 to-pink-600/20 border-b border-gray-700/50 p-6">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+                          {selectedDay === 'No date' ? '?' : new Date(selectedDay).getDate()}
+                        </div>
+                        <div>
+                          <h2 className="text-3xl font-bold text-white">
+                            {selectedDay === 'No date' ? 'No date' : new Date(selectedDay).toLocaleDateString('en-US', { 
+                              weekday: 'long', 
+                              month: 'long', 
+                              day: 'numeric' 
+                            })}
+                          </h2>
+                          <p className="text-gray-300 text-sm mt-1">
+                            {new Date(selectedDay).toLocaleDateString('en-US', { year: 'numeric' })}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSelectedDay(null)}
+                      className="text-gray-400 hover:text-white text-3xl transition-transform hover:rotate-90 duration-200 w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-700/50"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  
+                  {/* Quick Stats */}
+                  <div className="grid grid-cols-3 gap-4 mt-6">
+                    <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
+                      <div className="text-gray-400 text-xs mb-1">Total Items</div>
+                      <div className="text-2xl font-bold text-white">{sortedDayItems.length}</div>
+                    </div>
+                    <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
+                      <div className="text-gray-400 text-xs mb-1">Total Cost</div>
+                      <div className="text-2xl font-bold text-green-400">${dayData.total.toLocaleString()}</div>
+                    </div>
+                    {timeRange ? (
+                      <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
+                        <div className="text-gray-400 text-xs mb-1">Schedule</div>
+                        <div className="text-lg font-semibold text-white">
+                          {timeRange.isSameTime 
+                            ? `All at ${formatTime(timeRange.start)}`
+                            : `${formatTime(timeRange.start)} - ${formatTime(timeRange.end)}`
+                          }
+                        </div>
+                        {uniqueTimes.length > 1 && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {uniqueTimes.length} time slots
+                          </div>
+                        )}
+                      </div>
+                    ) : itemsWithoutTime.length > 0 ? (
+                      <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700/50">
+                        <div className="text-gray-400 text-xs mb-1">Schedule</div>
+                        <div className="text-lg font-semibold text-gray-400">No specific times</div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Scrollable Content */}
+                <div className="overflow-y-auto max-h-[calc(95vh-250px)]">
+                  <div className="p-6">
+                    {/* Budget Summary - Enhanced */}
+                    {dailyBudget > 0 && (
+                      <div className="bg-gradient-to-r from-gray-700/50 to-gray-800/50 p-5 rounded-xl mb-6 border border-gray-600/50 backdrop-blur-sm">
+                        <div className="flex justify-between items-center mb-3">
+                          <span className="text-gray-300 font-medium">Daily Budget Progress</span>
+                          <span className="text-white font-bold text-lg">
+                            ${dayData.total.toLocaleString()} / ${dailyBudget.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="h-4 bg-gray-700/50 rounded-full overflow-hidden shadow-inner">
+                          <div 
+                            className={`h-4 ${barColor} rounded-full transition-all duration-500 shadow-lg`} 
+                            style={{ width: `${Math.min(pct, 100)}%` }} 
+                          />
+                        </div>
+                        <div className="flex justify-between items-center mt-3">
+                          <span className="text-sm text-gray-400">
+                            {pct.toFixed(1)}% of budget used
+                          </span>
+                          <span className={`text-sm font-semibold ${dayData.total <= dailyBudget ? 'text-green-400' : 'text-red-400'}`}>
+                            {dayData.total <= dailyBudget 
+                              ? `$${(dailyBudget - dayData.total).toFixed(2)} remaining`
+                              : `$${(dayData.total - dailyBudget).toFixed(2)} over budget`
+                            }
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Timeline View */}
+                    {sortedDayItems.length === 0 ? (
+                      <div className="text-center py-16">
+                        <div className="text-6xl mb-4">📅</div>
+                        <p className="text-gray-400 text-lg">No items scheduled for this day</p>
+                        <p className="text-gray-500 text-sm mt-2">Add items to start planning your day!</p>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        {/* Timeline line - only show if there are multiple time slots with items */}
+                        {Object.keys(itemsByTime).length > 1 && itemsWithTime.length > 0 && (
+                          <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-500 via-purple-500 to-pink-500 opacity-30"></div>
+                        )}
+                        
+                        <div className="space-y-8">
+                          {/* Group items by time */}
+                          {Object.entries(itemsByTime).map(([time, itemsAtTime], timeIndex) => {
+                            const timeSlots = Object.keys(itemsByTime)
+                            const isLastTimeSlot = timeIndex === timeSlots.length - 1
+                            const hasMultipleItems = itemsAtTime.length > 1
+                            
+                            return (
+                              <div key={time} className="relative">
+                                {/* Time slot header - only show if multiple items at same time */}
+                                {hasMultipleItems && (
+                                  <div className="flex items-center gap-4 mb-4">
+                                    <div className="flex-shrink-0 w-20 text-right">
+                                      <div className="text-lg font-bold text-white">
+                                        {formatTime(time)}
+                                      </div>
+                                      <div className="text-xs text-gray-400 mt-1">
+                                        {itemsAtTime.length} {itemsAtTime.length === 1 ? 'item' : 'items'}
+                                      </div>
+                                    </div>
+                                    <div className="flex-1 h-px bg-gradient-to-r from-gray-600 to-transparent"></div>
+                                  </div>
+                                )}
+                                
+                                {/* Items at this time */}
+                                <div className={`space-y-4 ${hasMultipleItems ? 'ml-24' : ''}`}>
+                                  {itemsAtTime.map((item, itemIndex) => {
+                                    const isLastItem = itemIndex === itemsAtTime.length - 1
+                                    const showTimeline = !hasMultipleItems || (hasMultipleItems && itemIndex === 0)
+                                    
+                                    return (
+                                      <div key={item.id} className="relative flex gap-6 group">
+                                        {/* Time indicator - only show for first item in group or single items */}
+                                        {showTimeline && (
+                                          <>
+                                            <div className="flex-shrink-0 w-20 text-right pt-1">
+                                              {!hasMultipleItems && (
+                                                <>
+                                                  <div className="text-lg font-bold text-white">
+                                                    {formatTime(item.time)}
+                                                  </div>
+                                                  <div className="text-xs text-gray-400 mt-1">
+                                                    {new Date(`2000-01-01T${item.time}`).toLocaleTimeString('en-US', { 
+                                                      hour: 'numeric', 
+                                                      minute: '2-digit',
+                                                      hour12: true 
+                                                    }).toLowerCase()}
+                                                  </div>
+                                                </>
+                                              )}
+                                            </div>
+                                            
+                                            {/* Timeline dot and line */}
+                                            <div className="flex flex-col items-center flex-shrink-0">
+                                              <div className={`w-6 h-6 rounded-full ${getItemTypeColor(item.item_type)} flex items-center justify-center text-white text-xs font-bold shadow-lg ring-4 ring-gray-800 group-hover:scale-125 transition-transform duration-200`}>
+                                                {getItemTypeIcon(item.item_type)}
+                                              </div>
+                                              {/* Show connecting line from timeline dot to next time slot or items without time */}
+                                              {((isLastItem && !isLastTimeSlot) || (isLastItem && isLastTimeSlot && itemsWithoutTime.length > 0)) && (
+                                                <div className="w-0.5 h-full min-h-[60px] bg-gradient-to-b from-blue-500/50 to-purple-500/50 mt-2"></div>
+                                              )}
+                                            </div>
+                                          </>
+                                        )}
+                                        
+                                        {/* Item card */}
+                                        <div className={`flex-1 bg-gradient-to-br from-gray-700/40 to-gray-800/60 p-5 rounded-xl border border-gray-600/50 hover:border-gray-500 transition-all duration-200 group-hover:shadow-xl group-hover:scale-[1.01] backdrop-blur-sm ${!showTimeline ? 'ml-32' : ''}`}>
+                                          <div className="flex items-start justify-between gap-4">
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-3 mb-3 flex-wrap">
+                                                {!showTimeline && (
+                                                  <div className={`w-8 h-8 rounded-lg ${getItemTypeColor(item.item_type)} flex items-center justify-center text-white text-sm flex-shrink-0`}>
+                                                    {getItemTypeIcon(item.item_type)}
+                                                  </div>
+                                                )}
+                                                <h3 className="text-xl font-bold text-white group-hover:text-blue-300 transition-colors">
+                                                  {item.title}
+                                                </h3>
+                                                <span className="text-xs text-gray-300 capitalize px-3 py-1 bg-gray-600/50 rounded-full border border-gray-500/50">
+                                                  {item.item_type}
+                                                </span>
+                                              </div>
+                                              
+                                              {item.description && (
+                                                <p className="text-gray-300 mb-4 leading-relaxed">{item.description}</p>
+                                              )}
+                                              
+                                              <div className="flex flex-wrap gap-4 text-sm">
+                                                {item.location && (
+                                                  <div className="flex items-center gap-2 text-gray-300 bg-gray-800/50 px-3 py-1.5 rounded-lg">
+                                                    <span className="text-base">📍</span>
+                                                    <span className="font-medium">{item.location}</span>
+                                                  </div>
+                                                )}
+                                                {item.price && (
+                                                  <div className="flex items-center gap-2 text-green-400 bg-green-500/10 px-3 py-1.5 rounded-lg border border-green-500/20">
+                                                    <span className="text-base">💰</span>
+                                                    <span className="font-bold">${item.price.toLocaleString()}</span>
+                                                  </div>
+                                                )}
+                                              </div>
+                                              
+                                              {item.url && (
+                                                <a
+                                                  href={item.url}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 text-sm mt-4 font-medium group/link"
+                                                >
+                                                  <span>View Details</span>
+                                                  <span className="group-hover/link:translate-x-1 transition-transform">→</span>
+                                                </a>
+                                              )}
+                                            </div>
+                                            <button
+                                              onClick={() => {
+                                                if (confirm('Are you sure you want to delete this item?')) {
+                                                  handleDeleteItem(item.id)
+                                                  if (sortedDayItems.length === 1) {
+                                                    setSelectedDay(null)
+                                                  }
+                                                }
+                                              }}
+                                              className="text-red-400 hover:text-red-300 text-sm flex-shrink-0 px-3 py-2 rounded-lg hover:bg-red-500/10 transition-colors"
+                                              title="Delete item"
+                                            >
+                                              🗑️
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )
+                          })}
+                          
+                          {/* Items without time - Regular view */}
+                          {itemsWithoutTime.length > 0 && (
+                            <div className="mt-8 pt-8 border-t border-gray-700/50">
+                              <h3 className="text-lg font-semibold text-gray-400 mb-4 flex items-center gap-2">
+                                <span>⏰</span>
+                                <span>Items without specific time</span>
+                              </h3>
+                              <div className="space-y-4">
+                                {itemsWithoutTime.map((item) => (
+                                  <div key={item.id} className="bg-gradient-to-br from-gray-700/40 to-gray-800/60 p-5 rounded-xl border border-gray-600/50 hover:border-gray-500 transition-all duration-200 hover:shadow-xl hover:scale-[1.01] backdrop-blur-sm">
+                                    <div className="flex items-start gap-4">
+                                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white text-xl flex-shrink-0 ${getItemTypeColor(item.item_type)} shadow-lg`}>
+                                        {getItemTypeIcon(item.item_type)}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-3 mb-2 flex-wrap">
+                                          <h3 className="text-lg font-bold text-white">{item.title}</h3>
+                                          <span className="text-xs text-gray-300 capitalize px-2 py-1 bg-gray-600/50 rounded-full">
+                                            {item.item_type}
+                                          </span>
+                                        </div>
+                                        
+                                        {item.description && (
+                                          <p className="text-gray-300 mb-3 text-sm">{item.description}</p>
+                                        )}
+                                        
+                                        <div className="flex flex-wrap gap-3 text-sm">
+                                          {item.location && (
+                                            <div className="flex items-center gap-2 text-gray-300">
+                                              <span>📍</span>
+                                              <span>{item.location}</span>
+                                            </div>
+                                          )}
+                                          {item.price && (
+                                            <div className="flex items-center gap-2 text-green-400">
+                                              <span>💰</span>
+                                              <span className="font-semibold">${item.price.toLocaleString()}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                        
+                                        {item.url && (
+                                          <a
+                                            href={item.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-400 hover:text-blue-300 text-sm mt-3 inline-block"
+                                          >
+                                            View Details →
+                                          </a>
+                                        )}
+                                      </div>
+                                      <button
+                                        onClick={() => {
+                                          if (confirm('Are you sure you want to delete this item?')) {
+                                            handleDeleteItem(item.id)
+                                            if (sortedDayItems.length === 1) {
+                                              setSelectedDay(null)
+                                            }
+                                          }
+                                        }}
+                                        className="text-red-400 hover:text-red-300 text-sm flex-shrink-0 px-3 py-2 rounded-lg hover:bg-red-500/10 transition-colors"
+                                        title="Delete item"
+                                      >
+                                        🗑️
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

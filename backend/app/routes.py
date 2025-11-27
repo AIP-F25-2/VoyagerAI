@@ -1,10 +1,14 @@
 from flask import Blueprint, jsonify, request
-from .models import db, Event, Favorite, EventShare, EventReview, Subscription, Itinerary, ItineraryItem, Hotel
+import os
+import logging
+from .models import db, Event, Favorite, EventShare, EventReview, Subscription, Itinerary, ItineraryItem, ItineraryCollaborator, Hotel, User
 from .__init__ import cache, limiter
 from .utils.error_handler import success_response, error_response, handle_route_exception
 from .services.notification_service import notification_service
 from .services.recommendation_service import recommendation_service
 from .services.llm_service import llm_service
+
+logger = logging.getLogger(__name__)
 from .services.hotels import search_hotels, get_hotels_by_city, get_all_hotels, search_hotels_by_query
 from .services.flights import search_flights
 from .services.scraper import (
@@ -2286,6 +2290,205 @@ def delete_itinerary_item(itinerary_id, item_id):
         return jsonify({
             "success": True,
             "message": "Item deleted successfully"
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return error_response(str(e), 500)
+
+
+# Group Planning endpoints
+@bp.route("/itineraries/<int:itinerary_id>/share", methods=["POST"])
+@limiter.limit("10/minute")
+def share_itinerary(itinerary_id):
+    """Share an itinerary and generate a share token"""
+    try:
+        itinerary = Itinerary.query.get_or_404(itinerary_id)
+        data = request.get_json() or {}
+        
+        # Generate unique share token
+        import secrets
+        share_token = secrets.token_urlsafe(32)
+        itinerary.share_token = share_token
+        itinerary.is_shared = True
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "share_token": share_token,
+            "share_url": f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/travel-plans/shared/{share_token}"
+        })
+    except Exception as e:
+        db.session.rollback()
+        return error_response(str(e), 500)
+
+
+@bp.route("/itineraries/shared/<share_token>", methods=["GET"])
+@limiter.limit("30/minute")
+def get_shared_itinerary(share_token):
+    """Get a shared itinerary by token"""
+    try:
+        itinerary = Itinerary.query.filter_by(share_token=share_token, is_shared=True).first_or_404()
+        return jsonify({
+            "success": True,
+            "itinerary": itinerary.to_dict()
+        })
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@bp.route("/itineraries/<int:itinerary_id>/collaborators", methods=["GET"])
+@limiter.limit("60/minute")
+def get_itinerary_collaborators(itinerary_id):
+    """Get all collaborators for an itinerary"""
+    try:
+        itinerary = Itinerary.query.get_or_404(itinerary_id)
+        collaborators = ItineraryCollaborator.query.filter_by(itinerary_id=itinerary_id).all()
+        
+        return jsonify({
+            "success": True,
+            "collaborators": [collab.to_dict() for collab in collaborators]
+        })
+    except Exception as e:
+        return error_response(str(e), 500)
+
+
+@bp.route("/itineraries/<int:itinerary_id>/collaborators", methods=["POST"])
+@limiter.limit("10/minute")
+def invite_collaborator(itinerary_id):
+    """Invite a user to collaborate on an itinerary"""
+    try:
+        itinerary = Itinerary.query.get_or_404(itinerary_id)
+        data = request.get_json() or {}
+        
+        user_email = (data.get("user_email") or "").strip()
+        role = data.get("role", "viewer")  # owner, editor, viewer
+        invited_by_user_id = data.get("invited_by_user_id")
+        
+        if not user_email:
+            return error_response("user_email is required", 400)
+        
+        if role not in ["owner", "editor", "viewer"]:
+            return error_response("Invalid role. Must be owner, editor, or viewer", 400)
+        
+        # Check if user exists
+        user = User.query.filter_by(email=user_email).first()
+        user_id = user.id if user else None
+        
+        # Check if already a collaborator
+        existing = ItineraryCollaborator.query.filter_by(
+            itinerary_id=itinerary_id,
+            user_email=user_email
+        ).first()
+        
+        if existing:
+            return error_response("User is already a collaborator", 409)
+        
+        # Create collaboration
+        collaborator = ItineraryCollaborator(
+            itinerary_id=itinerary_id,
+            user_email=user_email,
+            user_id=user_id,
+            role=role,
+            status="pending",
+            invited_by=invited_by_user_id
+        )
+        
+        db.session.add(collaborator)
+        db.session.commit()
+        
+        # Send email notification if email service is configured
+        try:
+            from .services.email_service import email_service
+            inviter = User.query.get(invited_by_user_id) if invited_by_user_id else None
+            inviter_name = inviter.name if inviter else "Someone"
+            
+            # Get share URL if available
+            share_url = None
+            if itinerary.share_token:
+                share_url = f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/travel-plans/shared/{itinerary.share_token}"
+            
+            email_sent = email_service.send_collaboration_invite_email(
+                invitee_email=user_email,
+                inviter_name=inviter_name,
+                itinerary_title=itinerary.title,
+                role=role,
+                share_url=share_url
+            )
+            
+            if email_sent:
+                logger.info(f"Collaboration invitation email sent to {user_email}")
+            else:
+                logger.warning(f"Failed to send invitation email to {user_email} (SMTP may not be configured)")
+        except Exception as e:
+            # Don't fail the invitation if email fails
+            logger.error(f"Error sending invitation email: {e}")
+        
+        return jsonify({
+            "success": True,
+            "message": "Invitation sent successfully",
+            "collaborator": collaborator.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return error_response(str(e), 500)
+
+
+@bp.route("/itineraries/<int:itinerary_id>/collaborators/<int:collaborator_id>", methods=["PUT"])
+@limiter.limit("10/minute")
+def update_collaborator(itinerary_id, collaborator_id):
+    """Update collaborator status (accept/decline) or role"""
+    try:
+        collaborator = ItineraryCollaborator.query.filter_by(
+            id=collaborator_id,
+            itinerary_id=itinerary_id
+        ).first_or_404()
+        
+        data = request.get_json() or {}
+        
+        if "status" in data:
+            new_status = data["status"]
+            if new_status in ["pending", "accepted", "declined"]:
+                collaborator.status = new_status
+                if new_status == "accepted" and not collaborator.joined_at:
+                    collaborator.joined_at = datetime.now(timezone.utc)
+        
+        if "role" in data:
+            new_role = data["role"]
+            if new_role in ["owner", "editor", "viewer"]:
+                collaborator.role = new_role
+        
+        collaborator.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Collaborator updated successfully",
+            "collaborator": collaborator.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return error_response(str(e), 500)
+
+
+@bp.route("/itineraries/<int:itinerary_id>/collaborators/<int:collaborator_id>", methods=["DELETE"])
+@limiter.limit("10/minute")
+def remove_collaborator(itinerary_id, collaborator_id):
+    """Remove a collaborator from an itinerary"""
+    try:
+        collaborator = ItineraryCollaborator.query.filter_by(
+            id=collaborator_id,
+            itinerary_id=itinerary_id
+        ).first_or_404()
+        
+        db.session.delete(collaborator)
+        db.session.commit()
+        
+        return jsonify({
+            "success": True,
+            "message": "Collaborator removed successfully"
         })
         
     except Exception as e:

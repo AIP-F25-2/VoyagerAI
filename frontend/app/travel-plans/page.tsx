@@ -38,7 +38,6 @@ interface ItineraryItem {
 
 export default function ItinerariesPage() {
   const { user, isAuthenticated } = useAuth()
-  const router = useRouter()
   const [travelPlans, setTravelPlans] = useState<Itinerary[]>([])
   const [savedEvents, setSavedEvents] = useState<any[]>([])
   const [loading, setLoading] = useState(true)

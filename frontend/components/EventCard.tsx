@@ -1,6 +1,7 @@
 import { EventItem } from "@/lib/api";
 import styles from "./EventCard.module.css";
 import AddToItinerary from "./AddToItinerary";
+import EnhancedEventReviews from "./EnhancedEventReviews";
 
 interface Props {
   event: EventItem;
@@ -77,6 +78,16 @@ export default function EventCard({ event }: Props) {
             price: event.price ? Number.parseFloat(event.price.replace(/[^0-9.-]+/g, '')) : undefined,
             url: event.url
           }}
+        />
+      </div>
+
+      {/* Enhanced Reviews - Compact View */}
+      <div className="mt-4 pt-4 border-t border-gray-700">
+        <EnhancedEventReviews
+          eventTitle={event.title}
+          eventUrl={event.url}
+          eventDate={event.date}
+          compact={true}
         />
       </div>
     </div>
