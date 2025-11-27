@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """
-berlin_scraper_robust.py - Robust scraper for Berlin events with multiple fallback strategies
+berlin_scraper_robust_full.py
+Robust, deeper Berlin events scraper for europaticket.com
 """
 
-import requests, time, csv, sys
+import requests
+import time
+import csv
+import sys
 import pandas as pd
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 import re
 import json
 import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import deque
 
 # --- CONFIG ---
 BASE = "https://www.europaticket.com"
@@ -19,627 +25,491 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.5",
     "Accept-Encoding": "gzip, deflate",
     "Connection": "keep-alive",
-    "Upgrade-Insecure-Requests": "1",
-    "Referer": "https://www.europaticket.com/",
-    "Cache-Control": "no-cache",
+    "Referer": BASE + "/",
 }
 OUT_CSV = "berlin_events_large.csv"
-DELAY = 1.5
+TEMP_BACKUP_PREFIX = "berlin_events_temp_"
+DELAY = 1.0                # base delay between requests (randomized)
 MAX_EVENTS = 5000
+MAX_WORKERS = 8            # thread pool size for parsing pages
+REQUEST_RETRIES = 3
+REQUEST_TIMEOUT = 25
 
-def soup(url, retries=3):
-    """Fetch URL and parse with BeautifulSoup with retry logic."""
-    for attempt in range(retries):
+# --- GLOBALS ---
+seen_event_urls = set()
+discovered_urls = set()
+session = requests.Session()
+session.headers.update(HEADERS)
+
+
+def polite_sleep(base=DELAY):
+    """Randomized polite sleep to reduce blocking."""
+    time.sleep(random.uniform(base * 0.5, base * 1.5))
+
+
+def fetch(url, retries=REQUEST_RETRIES, timeout=REQUEST_TIMEOUT):
+    """Fetch a URL with retries and return BeautifulSoup or None."""
+    for attempt in range(1, retries + 1):
         try:
-            # Add random delay to avoid being blocked
-            time.sleep(random.uniform(0.5, 1.5))
-            
-            response = requests.get(url, headers=HEADERS, timeout=30)
-            response.raise_for_status()
-
-            
-            
-            # Check if we got a valid response
-            if response.status_code == 200 and len(response.text) > 1000:
-                return BeautifulSoup(response.text, "html.parser")
-            else:
-                print(f"[WARNING] Received short response for {url}")
-                
+            polite_sleep()
+            resp = session.get(url, timeout=timeout)
+            resp.raise_for_status()
+            text = resp.text or ""
+            # skip very short pages (likely blocked or captcha)
+            if len(text) < 800:
+                # allow one extra attempt
+                if attempt == retries:
+                    print(f"[WARN] Short response for {url} (len={len(text)})")
+                    return BeautifulSoup(text, "html.parser")
+                else:
+                    print(f"[WARN] Received short response; retrying {url}")
+                    time.sleep(attempt * 1.5)
+                    continue
+            return BeautifulSoup(text, "html.parser")
         except Exception as e:
-            if attempt < retries - 1:
-                wait_time = (attempt + 1) * 2
-                print(f"[RETRY {attempt + 1}/{retries}] Failed to fetch {url}: {e}")
-                print(f"[WAIT] Waiting {wait_time} seconds before retry...")
-                time.sleep(wait_time)
+            print(f"[ERROR] fetch {url} attempt {attempt}/{retries}: {e}")
+            if attempt < retries:
+                time.sleep(attempt * 1.5)
             else:
-                print(f"[ERROR] Failed to fetch {url} after {retries} attempts: {e}")
                 return None
     return None
 
-def get_berlin_events_robust():
-    """Get Berlin events using multiple strategies."""
-    event_links = set()
-    
-    # Strategy 1: Main Berlin city page
-    berlin_urls = [
+
+def normalize_url(href, base=BASE):
+    if not href:
+        return None
+    # ignore javascript: and mailto:
+    if href.startswith("javascript:") or href.startswith("mailto:"):
+        return None
+    try:
+        return urljoin(base, href.split("#")[0])
+    except:
+        return None
+
+
+def discover_seed_urls():
+    """Build initial seed list: city pages, month pages, venue lists and search queries."""
+    seeds = set()
+
+    # Basic city pages
+    city_variants = [
         f"{BASE}/en/city/berlin",
         f"{BASE}/en/city/berlin/",
         f"{BASE}/city/berlin",
         f"{BASE}/city/berlin/"
     ]
-    
-    # Strategy 2: Berlin venue pages
-    venue_urls = [
+    seeds.update(city_variants)
+
+    # Add month-based permutations (many sites have month anchors)
+    months = [
+        "january", "february", "march", "april", "may", "june",
+        "july", "august", "september", "october", "november", "december"
+    ]
+    for m in months:
+        seeds.add(f"{BASE}/en/city/berlin/{m}")
+        seeds.add(f"{BASE}/city/berlin/{m}")
+
+    # Known venue pages (seed list)
+    venue_seeds = [
         f"{BASE}/en/venue/berliner-philharmonie",
         f"{BASE}/en/venue/deutsche-oper-berlin",
-        f"{BASE}/en/venue/konzerthaus-berlin", 
+        f"{BASE}/en/venue/konzerthaus-berlin",
         f"{BASE}/en/venue/staatsoper-unter-den-linden",
         f"{BASE}/en/venue/mercedes-benz-arena-berlin",
         f"{BASE}/en/venue/waldbuhne-berlin",
         f"{BASE}/en/venue/friedrichstadt-palace-berlin"
     ]
-    
-    # Strategy 3: Search URLs for Berlin events
-    search_urls = [
-        f"{BASE}/en/search?city=berlin",
-        f"{BASE}/en/calendar?city=berlin",
-        f"{BASE}/search?q=berlin",
-        f"{BASE}/en/events?city=berlin"
+    seeds.update(venue_seeds)
+
+    # Expanded search queries
+    search_queries = [
+        "berlin", "berlin+concert", "berlin+opera", "berlin+festival",
+        "berlin+theatre", "germany+berlin", "berlin+show", "berlin+music"
     ]
-    
-    all_urls = berlin_urls + venue_urls + search_urls
-    
-    print(f"[INFO] Checking {len(all_urls)} URLs for Berlin events...")
-    
-    for i, url in enumerate(all_urls, 1):
-        print(f"[{i}/{len(all_urls)}] Checking: {url}")
-        
-        sp = soup(url)
+    for q in search_queries:
+        seeds.add(f"{BASE}/en/search?q={q}")
+        seeds.add(f"{BASE}/search?q={q}")
+
+    # Add calendar page
+    seeds.add(f"{BASE}/en/calendar")
+    seeds.add(f"{BASE}/calendar")
+
+    return list(seeds)
+
+
+def auto_discover_urls_from_page(sp, current_url, queue):
+    """Discover category pages, venue pages, pagination and event links from a page soup."""
+    if not sp:
+        return 0
+
+    new_count = 0
+    # 1) Find event links
+    event_selectors = [
+        'a[href*="/event/"]',
+        'a[href*="/en/event/"]',
+        'a[href*="event"]',
+        'a[href*="concert"]',
+        'a[href*="performance"]',
+        '.event a', '.card a', '.item a', '.event-item a', '.event-card a'
+    ]
+    for sel in event_selectors:
+        for a in sp.select(sel):
+            href = a.get('href')
+            full = normalize_url(href)
+            if full and BASE in full and '/event/' in full and full not in seen_event_urls:
+                seen_event_urls.add(full)
+                new_count += 1
+
+    # 2) Category & pagination & venue discovery
+    category_keywords = ["opera", "concert", "ballet", "theatre", "music", "show", "festival", "venue", "city", "events", "calendar"]
+    for a in sp.find_all('a', href=True):
+        href = a['href'].lower()
+        full = normalize_url(href)
+        if not full or BASE not in full:
+            continue
+
+        # pagination links (look for page= or /page/)
+        is_pag = ('page=' in href) or (re.search(r'/page/\d+', href) is not None) or ('next' in href)
+        if is_pag and full not in discovered_urls:
+            discovered_urls.add(full)
+            queue.append(full)
+            # don't count as event link
+            continue
+
+        # category pages / month pages / venue pages
+        if any(k in href for k in category_keywords) and full not in discovered_urls:
+            discovered_urls.add(full)
+            queue.append(full)
+
+    return new_count
+
+
+def get_all_event_urls(max_urls=MAX_EVENTS):
+    """Crawl seed pages and discover event URLs (breadth-first) until reaching max_urls."""
+    seeds = discover_seed_urls()
+    queue = deque(seeds)
+    for s in seeds:
+        discovered_urls.add(s)
+
+    print(f"[INFO] Starting discovery with {len(seeds)} seed URLs.")
+    processed = 0
+
+    while queue and len(seen_event_urls) < max_urls:
+        url = queue.popleft()
+        processed += 1
+        print(f"[DISCOVER {processed}] {url}  - found events so far: {len(seen_event_urls)}")
+        sp = fetch(url)
         if not sp:
             continue
-            
-        # Debug: Check what we actually got
-        page_text = sp.get_text().lower()
-        print(f"  Page length: {len(page_text)} characters")
-        print(f"  Contains 'berlin': {'berlin' in page_text}")
-        print(f"  Contains 'event': {'event' in page_text}")
-        
-        # Multiple selectors to find event links
-        selectors = [
-            'a[href*="/event/"]',
-            'a[href*="/en/event/"]', 
-            '.event a',
-            '.card a',
-            '.item a',
-            '.event-item a',
-            '.event-card a',
-            '.performance a',
-            '.show a',
-            '.concert a',
-            'a[href*="event"]',
-            'a[href*="concert"]',
-            'a[href*="performance"]'
-        ]
-        
-        found_links = 0
-        for selector in selectors:
-            links = sp.select(selector)
-            for link in links:
-                href = link.get('href')
-                if href and ('/event/' in href or 'event' in href.lower()):
-                    clean_href = href.split('#')[0]
-                    full_url = urljoin(BASE, clean_href)
-                    
-                    # Check if it's a valid event URL
-                    if full_url not in event_links and 'europaticket.com' in full_url:
-                        event_links.add(full_url)
-                        found_links += 1
-        
-        print(f"  Found {found_links} new event links on this page")
-        
-        # Also look for any links that might lead to more events
-        all_links = sp.find_all('a', href=True)
-        for link in all_links:
-            href = link.get('href', '')
-            text = link.get_text().lower()
-            
-            # Look for Berlin-related links
-            if any(keyword in href.lower() or keyword in text for keyword in ['berlin', 'event', 'concert', 'performance']):
-                clean_href = href.split('#')[0]
-                full_url = urljoin(BASE, clean_href)
-                
-                if ('/event/' in full_url or 'event' in full_url.lower()) and full_url not in event_links:
-                    event_links.add(full_url)
-                    found_links += 1
-        
-        print(f"  Total new links found: {found_links}")
-        
-        # If we found many links, we might want to check pagination
-        if found_links > 10:
-            print(f"  [INFO] Found many links, checking for pagination...")
-            pagination_selectors = [
-                'a[href*="page="]',
-                '.pagination a',
-                '.page-numbers a', 
-                '.pager a',
-                'a[href*="next"]',
-                'a[href*="more"]'
-            ]
-            
-            for pag_selector in pagination_selectors:
-                pag_links = sp.select(pag_selector)
-                for pag_link in pag_links[:2]:  # Only check first 2 pagination links
-                    pag_href = pag_link.get('href')
-                    if pag_href:
-                        pag_url = urljoin(BASE, pag_href)
-                        if pag_url not in all_urls and 'page=' in pag_url:
-                            all_urls.append(pag_url)
-    
-    event_list = list(event_links)
-    print(f"\n[SUCCESS] Found {len(event_list)} unique Berlin event URLs")
-    
-    # If we still don't have enough, try a different approach
-    if len(event_list) < 50:
-        print("[INFO] Low event count, trying alternative approach...")
-        return get_berlin_events_alternative()
-    
-    return event_list[:MAX_EVENTS]
 
-def get_berlin_events_alternative():
-    """Alternative method to find Berlin events."""
-    event_links = set()
-    
-    print("[INFO] Trying alternative event discovery...")
-    
-    # Try to find events through search or API endpoints
-    search_terms = ['berlin', 'opera berlin', 'concert berlin', 'philharmonic berlin']
-    
-    for term in search_terms:
-        search_url = f"{BASE}/en/search?q={term}"
-        print(f"[INFO] Searching for: {term}")
-        
-        sp = soup(search_url)
-        if sp:
-            links = sp.find_all('a', href=True)
-            for link in links:
-                href = link.get('href', '')
-                if '/event/' in href:
-                    full_url = urljoin(BASE, href.split('#')[0])
-                    event_links.add(full_url)
-    
-    # Try calendar view
-    calendar_url = f"{BASE}/en/calendar"
-    print(f"[INFO] Checking calendar: {calendar_url}")
-    
-    sp = soup(calendar_url)
-    if sp:
-        links = sp.find_all('a', href=True)
-        for link in links:
-            href = link.get('href', '')
-            text = link.get_text().lower()
-            if '/event/' in href and 'berlin' in text:
-                full_url = urljoin(BASE, href.split('#')[0])
-                event_links.add(full_url)
-    
-    event_list = list(event_links)
-    print(f"[INFO] Alternative method found {len(event_list)} events")
-    
-    return event_list[:MAX_EVENTS]
+        # auto-discover category pages, pagination, venues and event links
+        new_links = auto_discover_urls_from_page(sp, url, queue)
+        print(f"  -> discovered {new_links} event links on this page; queue size {len(queue)}")
+        # also attempt to auto-discover venue list pages (e.g. /en/venue)
+        # find explicit venue lists
+        for a in sp.find_all('a', href=True):
+            href = a['href'].lower()
+            if '/venue' in href and BASE in normalize_url(href) and normalize_url(href) not in discovered_urls:
+                discovered_urls.add(normalize_url(href))
+                queue.append(normalize_url(href))
 
+    print(f"[DISCOVERY COMPLETE] Found {len(seen_event_urls)} unique event URLs")
+    return list(seen_event_urls)[:max_urls]
+
+
+# -------------------------
+# Event parsing utilities
+# -------------------------
 def clean_text(text):
-    """Clean extracted text."""
     if not text:
         return None
-    
     text = re.sub(r'\s+', ' ', text.strip())
-    unwanted_patterns = [
-        r'ENDEITFRESRUJPRO.*?CALL NOW:.*?\d+',
-        r'Shop now.*?tickets:.*?€',
-        r'PHONE.*?WHATSAPP.*?CALL NOW:.*?\d+',
-        r'MenuMenu',
-        r'CALL NOW:.*?\d+',
-        r'Buy Official Tickets.*?Visit our website.*?',
-        r'For more information.*?contact us by phone.*?',
-    ]
-    
-    for pattern in unwanted_patterns:
-        text = re.sub(pattern, '', text, flags=re.IGNORECASE | re.DOTALL)
-    
-    return text.strip() if text.strip() else None
+    # remove common junk
+    junk_patterns = [r'Buy Official Tickets.*', r'CALL NOW:.*', r'MenuMenu']
+    for p in junk_patterns:
+        text = re.sub(p, '', text, flags=re.IGNORECASE)
+    return text.strip() or None
 
-def extract_venue_from_description(description):
-    """Extract venue from description text."""
-    if not description:
+
+def extract_price_from_description(text):
+    if not text:
         return None
-    
-    berlin_venues = [
-        'Staatsoper Unter den Linden', 'Deutsche Oper Berlin', 'Konzerthaus Berlin',
-        'Berliner Philharmonie', 'Mercedes-Benz Arena', 'Olympiastadion Berlin',
-        'Waldbühne Berlin', 'Friedrichstadt Palace', 'Komische Oper Berlin',
-        'Theater des Westens', 'Charlottenburg Palace', 'Pierre Boulez Hall',
-        'Bluemax Theater', 'The Old Court Chapel', 'Kaiser Wilhelm Memorial Church'
+    patterns = [
+        r'from\s*€\s*(\d+(?:[\.,]\d+)?)',
+        r'€\s*(\d+(?:[\.,]\d+)?)',
+        r'(\d+(?:[\.,]\d+)?)\s*€'
     ]
-    
-    for venue in berlin_venues:
-        if venue.lower() in description.lower():
-            return venue
-    
-    at_patterns = [
-        r'at\s+([^,\.]+?)(?:\s*,|\s*\.|\s*in\s+Germany|\s*Berlin)',
-        r'at\s+([^,\.]+?)(?:\s*\.|\s*,|\s*Berlin)',
-        r'at\s+([A-Z][^,\.]+?)(?:\s*,|\s*\.)',
-    ]
-    
-    for pattern in at_patterns:
-        match = re.search(pattern, description, re.IGNORECASE)
-        if match:
-            venue = match.group(1).strip()
-            venue = re.sub(r'\s+', ' ', venue)
-            if len(venue) > 3 and not venue.lower().startswith('the ') and venue != 'Venue':
-                return venue
-    
+    for p in patterns:
+        m = re.search(p, text, re.IGNORECASE)
+        if m:
+            val = m.group(1).replace(',', '.')
+            return f"€{val}"
     return None
 
-def extract_price_from_description(description):
-    """Extract price from description text."""
-    if not description:
+
+def extract_time_from_text(text):
+    if not text:
         return None
-    
-    price_patterns = [
-        r'from\s*€\s*(\d+(?:\.\d{2})?)',
-        r'€\s*(\d+(?:\.\d{2})?)',
-        r'(\d+(?:\.\d{2})?)\s*€',
-        r'starting\s*from\s*€\s*(\d+(?:\.\d{2})?)',
-        r'prices?\s*from\s*€\s*(\d+(?:\.\d{2})?)',
-        r'€(\d+)',
-        r'(\d+)\s*€',
-    ]
-    
-    for pattern in price_patterns:
-        match = re.search(pattern, description, re.IGNORECASE)
-        if match:
-            price = match.group(1)
-            return f"€{price}"
-    
+    # common time patterns
+    patterns = [r'\b\d{1,2}:\d{2}\b', r'\b\d{1,2}\s?[:]\s?\d{2}\s?(?:AM|PM|am|pm)?\b']
+    for p in patterns:
+        m = re.search(p, text)
+        if m:
+            return m.group(0)
     return None
 
-def extract_time_from_page(sp):
-    """Extract time information from page."""
-    time_patterns = [
-        r'\b(\d{1,2}:\d{2})\b',
-        r'\b(\d{1,2}:\d{2}\s*[AP]M)\b',
-        r'\b(\d{1,2}:\d{2}\s*[ap]m)\b',
-    ]
-    
+
+def extract_meta_ld_json(sp):
+    """Extract JSON-LD structured data if present and return dict (may be list)."""
+    try:
+        scripts = sp.find_all('script', type='application/ld+json')
+        collected = []
+        for s in scripts:
+            if not s.string:
+                continue
+            try:
+                obj = json.loads(s.string.strip())
+                collected.append(obj)
+            except Exception:
+                # try to fix common trailing commas
+                try:
+                    cleaned = re.sub(r',\s*}', '}', s.string)
+                    obj = json.loads(cleaned)
+                    collected.append(obj)
+                except Exception:
+                    continue
+        return collected
+    except Exception:
+        return []
+
+
+def parse_event_page(url):
+    """Parse event page and return a dict of fields."""
+    sp = fetch(url)
+    if not sp:
+        return None
+
+    result = {"url": url, "title": None, "date": None, "time": None,
+              "price": None, "venue": None, "description": None, "category": None, "image": None, "organizer": None}
+
+    # Title: prefer h1, then og:title, then title tag
+    h1 = sp.select_one('h1')
+    if h1 and h1.get_text(strip=True):
+        result['title'] = clean_text(h1.get_text(strip=True))
+    else:
+        og = sp.select_one('meta[property="og:title"]')
+        if og and og.get('content'):
+            result['title'] = clean_text(og.get('content'))
+        else:
+            t = sp.select_one('title')
+            if t:
+                result['title'] = clean_text(t.get_text())
+
+    # Description: meta description or main content paragraphs
+    desc_meta = sp.select_one('meta[name="description"]')
+    if desc_meta and desc_meta.get('content'):
+        result['description'] = clean_text(desc_meta.get('content'))
+    else:
+        # prefer specific selectors added in your original code
+        for sel in ('.description', '.event-description', '.summary', '.content p', '.event-content p'):
+            el = sp.select_one(sel)
+            if el and el.get_text(strip=True):
+                result['description'] = clean_text(el.get_text())
+                break
+
+    # Structured JSON-LD
+    ld = extract_meta_ld_json(sp)
+    if ld:
+        # find an object that looks like event
+        for obj in ld:
+            if isinstance(obj, dict):
+                if obj.get('@type') and 'Event' in obj.get('@type'):
+                    if obj.get('name') and not result['title']:
+                        result['title'] = obj.get('name')
+                    if obj.get('startDate'):
+                        dt = obj.get('startDate')
+                        if 'T' in dt:
+                            date_part, time_part = dt.split('T', 1)
+                            result['date'] = date_part
+                            result['time'] = time_part.split('+')[0].split('-')[0]
+                        else:
+                            result['date'] = dt
+                    if obj.get('location'):
+                        if isinstance(obj['location'], dict):
+                            result['venue'] = obj['location'].get('name') or result['venue']
+                    if obj.get('offers'):
+                        offers = obj.get('offers')
+                        if isinstance(offers, dict):
+                            price = offers.get('price') or offers.get('priceSpecification', {}).get('price')
+                            if price:
+                                result['price'] = f"€{price}" if not str(price).startswith("€") else str(price)
+                    if obj.get('image') and not result.get('image'):
+                        result['image'] = obj.get('image')
+
+    # Venue: try heuristics if not from structured data
+    if not result['venue']:
+        # look for a link to /venue/ or /location/
+        ven_link = sp.find('a', href=re.compile(r'/venue/|/location/'))
+        if ven_link and ven_link.get_text(strip=True):
+            result['venue'] = clean_text(ven_link.get_text(strip=True))
+        else:
+            for sel in ('.venue', '.location', '.place', '.theatre', '.hall', '.arena', '[class*="venue"]'):
+                el = sp.select_one(sel)
+                if el and el.get_text(strip=True):
+                    result['venue'] = clean_text(el.get_text(strip=True))
+                    break
+
+    # Date and time: try time elements and fallback to regex
     time_elem = sp.find('time')
     if time_elem:
-        time_attr = time_elem.get('datetime')
-        if time_attr and 'T' in time_attr:
-            time_part = time_attr.split('T')[1].split('+')[0].split('-')[0]
-            if len(time_part) >= 5:
-                return time_part
-    
-    page_text = sp.get_text()
-    for pattern in time_patterns:
-        match = re.search(pattern, page_text, re.IGNORECASE)
-        if match:
-            return match.group(1)
-    
-    return None
-
-def parse_event(url):
-    """Extract event details with improved parsing."""
-    sp = soup(url)
-    if not sp:
-        return {}
-    
-    result = {"url": url}
-    
-    # Title
-    title = None
-    title_selectors = [
-        'h1',
-        '.event-title',
-        '.title',
-        'meta[property="og:title"]',
-        'title'
-    ]
-    
-    for selector in title_selectors:
-        if selector.startswith('meta'):
-            elem = sp.select_one(selector)
-            if elem and elem.get('content'):
-                title = elem.get('content')
-                break
-        else:
-            elem = sp.select_one(selector)
-            if elem:
-                title = elem.get_text(strip=True)
-                break
-    
-    result["title"] = clean_text(title)
-    
-    # Description
-    desc = None
-    desc_selectors = [
-        '.description',
-        '.event-description',
-        '.summary',
-        'meta[name="description"]',
-        '.content p',
-        '.event-content p'
-    ]
-    
-    for selector in desc_selectors:
-        if selector.startswith('meta'):
-            elem = sp.select_one(selector)
-            if elem and elem.get('content'):
-                desc = elem.get('content')
-                break
-        else:
-            elem = sp.select_one(selector)
-            if elem:
-                desc = elem.get_text(strip=True)
-                break
-    
-    result["description"] = clean_text(desc)
-    
-    # Venue
-    venue = extract_venue_from_description(desc)
-    
-    if not venue:
-        venue_link = sp.find('a', href=re.compile(r'/venue/|/location/'))
-        if venue_link:
-            venue = venue_link.get_text(strip=True)
-        
-        if not venue:
-            venue_selectors = [
-                '.venue',
-                '.location',
-                '.place',
-                '.theatre',
-                '.opera',
-                '.hall',
-                '.arena',
-                '.stadium',
-                '[class*="venue"]',
-                '[class*="location"]'
-            ]
-            
-            for selector in venue_selectors:
-                elem = sp.select_one(selector)
-                if elem:
-                    venue = elem.get_text(strip=True)
-                    break
-    
-    result["venue"] = clean_text(venue)
-    
-    # Date and Time
-    date = None
-    time_val = None
-    
-    # Try structured data
-    json_scripts = sp.find_all('script', type='application/ld+json')
-    for script in json_scripts:
-        try:
-            data = json.loads(script.string)
-            if isinstance(data, dict):
-                if 'startDate' in data:
-                    start_date = data['startDate']
-                    if 'T' in start_date:
-                        date_part, time_part = start_date.split('T')
-                        date = date_part
-                        time_val = time_part.split('+')[0].split('-')[0]
-                    else:
-                        date = start_date
-                elif 'datePublished' in data:
-                    date = data['datePublished']
-        except:
-            continue
-    
-    # Try time elements
-    if not date:
-        time_elem = sp.find('time')
-        if time_elem:
-            datetime_attr = time_elem.get('datetime')
-            if datetime_attr:
-                if 'T' in datetime_attr:
-                    date_part, time_part = datetime_attr.split('T')
-                    date = date_part
-                    if not time_val:
-                        time_val = time_part.split('+')[0].split('-')[0]
-                else:
-                    date = datetime_attr
+        dt = time_elem.get('datetime')
+        if dt:
+            if 'T' in dt:
+                date_part, time_part = dt.split('T', 1)
+                result['date'] = date_part
+                result['time'] = time_part.split('+')[0].split('-')[0]
             else:
-                date = time_elem.get_text(strip=True)
-    
-    # Try date-related selectors
-    if not date:
-        date_selectors = [
-            '.date',
-            '.event-date',
-            '.performance-date',
-            '.show-date',
-            '[class*="date"]'
-        ]
-        
-        for selector in date_selectors:
-            elem = sp.select_one(selector)
-            if elem:
-                date = elem.get_text(strip=True)
-                break
-    
-    # Look for date patterns in text
-    if not date:
-        page_text = sp.get_text()
+                result['date'] = dt
+        else:
+            ttxt = time_elem.get_text(strip=True)
+            if ttxt:
+                # may contain both date and time
+                if re.search(r'\d{4}', ttxt):
+                    result['date'] = clean_text(ttxt)
+                else:
+                    result['time'] = clean_text(ttxt)
+
+    # search for common date patterns in page if still not found
+    page_text = sp.get_text(separator=' ', strip=True)
+    if not result['date']:
         date_patterns = [
             r'\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}',
-            r'\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4}',
-            r'(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\s+\d{1,2}[a-z]*\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}',
-            r'\d{1,2}\.\d{1,2}\.\d{4}',
-            r'\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}'
+            r'\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}',
+            r'\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}',
         ]
-        
-        for pattern in date_patterns:
-            match = re.search(pattern, page_text, re.IGNORECASE)
-            if match:
-                date = match.group(0)
+        for p in date_patterns:
+            m = re.search(p, page_text, re.IGNORECASE)
+            if m:
+                result['date'] = clean_text(m.group(0))
                 break
-    
-    # Extract time if not already found
-    if not time_val:
-        time_val = extract_time_from_page(sp)
-    
-    result["date"] = clean_text(date)
-    result["time"] = clean_text(time_val)
-    
-    # Price
-    price = extract_price_from_description(desc)
-    
-    if not price:
-        price_selectors = [
-            '.price',
-            '.ticket-price',
-            '.cost',
-            '[class*="price"]'
-        ]
-        
-        for selector in price_selectors:
-            elem = sp.select_one(selector)
-            if elem:
-                price = elem.get_text(strip=True)
+
+    if not result['time']:
+        t = extract_time_from_text(page_text)
+        if t:
+            result['time'] = t
+
+    # Price: try dedicated selectors then regex on page text
+    if not result['price']:
+        for sel in ('.price', '.ticket-price', '.cost', '[class*="price"]'):
+            el = sp.select_one(sel)
+            if el and el.get_text(strip=True):
+                result['price'] = clean_text(el.get_text(strip=True))
                 break
-        
-        if not price:
-            page_text = sp.get_text()
-            price_patterns = [
-                r'€\s*\d+(?:\.\d{2})?',
-                r'\d+(?:\.\d{2})?\s*€',
-                r'from\s*€\s*\d+',
-                r'starting\s*from\s*€\s*\d+',
-                r'\$\s*\d+(?:\.\d{2})?',
-                r'\d+(?:\.\d{2})?\s*\$'
-            ]
-            
-            for pattern in price_patterns:
-                match = re.search(pattern, page_text, re.IGNORECASE)
-                if match:
-                    price = match.group(0)
-                    break
-    
-    result["price"] = clean_text(price)
-    
+    if not result['price'] and result['description']:
+        result['price'] = extract_price_from_description(result['description'])
+    if not result['price']:
+        m = re.search(r'€\s*\d+(?:[.,]\d+)?', page_text)
+        if m:
+            result['price'] = m.group(0)
+
+    # Category/Type: try to detect
+    if not result['category']:
+        if 'opera' in page_text.lower():
+            result['category'] = 'Opera'
+        elif 'concert' in page_text.lower():
+            result['category'] = 'Concert'
+        elif 'theatre' in page_text.lower() or 'play' in page_text.lower():
+            result['category'] = 'Theatre'
+
+    # Organizer: attempt to parse
+    org = sp.select_one('.organizer, .promoter')
+    if org and org.get_text(strip=True):
+        result['organizer'] = clean_text(org.get_text(strip=True))
+
+    # Image: try og:image
+    og_image = sp.select_one('meta[property="og:image"]')
+    if og_image and og_image.get('content'):
+        result['image'] = og_image.get('content')
+
+    # final cleaning
+    for k in result:
+        if isinstance(result[k], str):
+            result[k] = result[k].strip() or None
+
     return result
 
-def save_results(results, filename):
-    """Save results to CSV file."""
+
+# -------------------------
+# Runner and save
+# -------------------------
+def save_results(results, filename=OUT_CSV):
     if not results:
         return False
-    
     df = pd.DataFrame(results)
-    cols = ["title", "date", "time", "price", "venue", "url", "description"]
-    df = df.reindex(columns=cols)
-    
-    try:
-        df.to_csv(filename, index=False, quoting=csv.QUOTE_NONNUMERIC, encoding='utf-8')
-        return True
-    except Exception as e:
-        print(f"[ERROR] Failed to save CSV: {e}")
-        return False
+    cols = ["title", "date", "time", "price", "venue", "category", "organizer", "image", "url", "description"]
+    # ensure all columns present
+    for c in cols:
+        if c not in df.columns:
+            df[c] = None
+    df = df[cols]
+    df.to_csv(filename, index=False, quoting=csv.QUOTE_NONNUMERIC, encoding='utf-8')
+    return True
 
-def main():
-    print(f"[INFO] Starting ROBUST large-scale Berlin events scraping")
-    print(f"[INFO] Target: Up to {MAX_EVENTS} events")
-    print(f"[INFO] Delay between requests: {DELAY}s")
-    print("="*80)
-    
-    # Get event URLs using robust method
-    print("[INFO] Discovering Berlin events using multiple strategies...")
-    event_urls = get_berlin_events_robust()
-    
+
+def run_scrape():
+    print("[START] Discovering event URLs...")
+    event_urls = get_all_event_urls(max_urls=MAX_EVENTS)
     if not event_urls:
-        print("[ERROR] No events found using any method!")
+        print("[ERROR] No event URLs discovered. Exiting.")
         return
-    
-    print(f"[INFO] Found {len(event_urls)} unique Berlin event URLs")
-    
+
+    print(f"[INFO] Will attempt to parse {len(event_urls)} event pages (capped by discovery).")
     results = []
-    failed_count = 0
-    start_time = time.time()
-    
-    for i, url in enumerate(event_urls, 1):
-        try:
-            print(f"\n[{i}/{len(event_urls)}] Processing: {url}")
-            event_data = parse_event(url)
-            
-            if event_data and event_data.get('title'):
-                results.append(event_data)
-                print(f"  ✓ Title: {event_data.get('title')}")
-                print(f"  ✓ Venue: {event_data.get('venue') or 'N/A'}")
-                print(f"  ✓ Date: {event_data.get('date') or 'N/A'}")
-                print(f"  ✓ Time: {event_data.get('time') or 'N/A'}")
-                print(f"  ✓ Price: {event_data.get('price') or 'N/A'}")
-                
-                # Show progress every 25 events
-                if i % 25 == 0:
-                    elapsed = time.time() - start_time
-                    rate = i / elapsed if elapsed > 0 else 0
-                    print(f"\n[PROGRESS] Processed {i}/{len(event_urls)} events ({len(results)} successful, {failed_count} failed)")
-                    print(f"[RATE] {rate:.1f} events/second")
-                    if rate > 0:
-                        print(f"[ETA] {(len(event_urls) - i) / rate / 60:.1f} minutes remaining")
-                    
-                    # Save intermediate results
-                    temp_filename = f"berlin_events_temp_{i}.csv"
-                    if save_results(results, temp_filename):
-                        print(f"[BACKUP] Saved {len(results)} events to {temp_filename}")
-            else:
-                failed_count += 1
-                print(f"  ✗ Failed to extract data")
-                
-        except KeyboardInterrupt:
-            print(f"\n[INTERRUPTED] Scraping stopped by user at event {i}")
-            break
-        except Exception as e:
-            failed_count += 1
-            print(f"  ✗ Error processing event: {e}")
-        
-        time.sleep(DELAY)
-    
-    # Final save
-    print("\n" + "="*80)
-    print("[INFO] SCRAPING COMPLETED")
-    print("="*80)
-    
-    if results:
-        if save_results(results, OUT_CSV):
-            print(f"[SUCCESS] {len(results)} Berlin events saved to {OUT_CSV}")
-            
-            # Print summary statistics
-            elapsed_total = time.time() - start_time
-            print(f"\n[STATISTICS]")
-            print(f"Total events processed: {len(event_urls)}")
-            print(f"Successfully scraped: {len(results)}")
-            print(f"Failed extractions: {failed_count}")
-            print(f"Success rate: {len(results)/len(event_urls)*100:.1f}%")
-            print(f"Total time: {elapsed_total/60:.1f} minutes")
-            if elapsed_total > 0:
-                print(f"Average rate: {len(event_urls)/elapsed_total:.1f} events/second")
-            
-            # Show sample of results
-            print(f"\n[SAMPLE RESULTS - First 5 events]")
-            for i, row in enumerate(pd.DataFrame(results).head().iterrows(), 1):
-                _, data = row
-                print(f"{i}. {data['title'] or 'N/A'}")
-                print(f"   Venue: {data['venue'] or 'N/A'}")
-                print(f"   Date: {data['date'] or 'N/A'}")
-                print(f"   Time: {data['time'] or 'N/A'}")
-                print(f"   Price: {data['price'] or 'N/A'}")
-                print()
-        else:
-            print(f"[ERROR] Failed to save final results to {OUT_CSV}")
+    failed = 0
+    start = time.time()
+
+    # use ThreadPoolExecutor for parallel parsing
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+        futures = {ex.submit(parse_event_page, url): url for url in event_urls}
+        completed = 0
+        for fut in as_completed(futures):
+            url = futures[fut]
+            try:
+                data = fut.result()
+                completed += 1
+                if data and data.get('title'):
+                    results.append(data)
+                    print(f"[PARSED {completed}/{len(event_urls)}] ✓ {data.get('title')[:80]} - {url}")
+                else:
+                    failed += 1
+                    print(f"[PARSED {completed}/{len(event_urls)}] ✗ no title extracted - {url}")
+            except Exception as e:
+                failed += 1
+                print(f"[ERROR] exception parsing {url}: {e}")
+
+            # backup every 50 completed
+            if completed % 50 == 0:
+                temp_file = TEMP_BACKUP_PREFIX + str(completed) + ".csv"
+                try:
+                    save_results(results, temp_file)
+                    print(f"[BACKUP] Saved {len(results)} parsed events to {temp_file}")
+                except Exception as e:
+                    print(f"[WARN] Failed to save backup: {e}")
+
+    elapsed = time.time() - start
+    print("=" * 80)
+    print(f"[DONE] Parsed: {len(results)} successful, {failed} failed, elapsed {elapsed/60:.2f} min")
+
+    # final save
+    ok = save_results(results, OUT_CSV)
+    if ok:
+        print(f"[SUCCESS] Saved final {len(results)} events to {OUT_CSV}")
     else:
-        print("[WARNING] No valid event data extracted")
+        print("[ERROR] Failed to save final CSV")
+
 
 if __name__ == "__main__":
-    main()
+    try:
+        run_scrape()
+    except KeyboardInterrupt:
+        print("\n[INTERRUPTED] User aborted.")
