@@ -107,8 +107,12 @@ def save_json(path: str, data):
 geocode_cache: Dict[str, Any] = load_json(GEOCODE_CACHE_FILE, {})
 overpass_city_cache: Dict[str, Any] = load_json(OVERPASS_CITY_CACHE_FILE, {})
 
+# def cache_key_city(city: str, radius: int) -> str:
+#     return hashlib.sha1(f"{city}|{radius}".encode("utf-8")).hexdigest()
 def cache_key_city(city: str, radius: int) -> str:
-    return hashlib.sha1(f"{city}|{radius}".encode("utf-8")).hexdigest()
+    raw = f"{city}|{radius}".encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+####
 
 def cache_fresh(ts_iso: str, ttl_days: int) -> bool:
     try:
@@ -468,4 +472,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
