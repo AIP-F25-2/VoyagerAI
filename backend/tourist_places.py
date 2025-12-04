@@ -73,7 +73,7 @@ retries = Retry(
     allowed_methods=frozenset(["GET", "POST"]),
 )
 session.mount("https://", HTTPAdapter(max_retries=retries))
-session.mount("http://", HTTPAdapter(max_retries=retries))
+session.mount("https://", HTTPAdapter(max_retries=retries))
 
 # -----------------------
 # Utils / cache
@@ -468,3 +468,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
